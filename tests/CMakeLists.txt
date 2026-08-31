@@ -1,0 +1,4 @@
+add_executable(runtime_probe_tests runtime_probe_tests.cpp)
+target_link_libraries(runtime_probe_tests PRIVATE ncm_runtime_probe_lib ncm_project_options)
+
+add_test(NAME runtime_probe_tests COMMAND runtime_probe_tests)
