@@ -1,0 +1,12 @@
+# Project Working Rules
+
+- Treat `tmp/` as ignored, non-canonical input. Validate useful claims against source code, the target executable, upstream primary sources, or fresh runtime evidence before adopting them.
+- Keep the product contract in `docs/specs/ncm-unblock-297.md` and unfinished execution state in `docs/plans/ncm-unblock-297.md`. Update them when behavior or scope changes; do not create parallel phase documents by default.
+- Target Windows and NCM 2.9.7.199711. Release code is native C++20 built with CMake and Visual Studio; build Win32 unless evidence and an accepted contract change require another architecture.
+- Keep launcher/bootstrap, core lifecycle, routing, configuration, packaging, and investigation tooling in separate modules. Do not add hook libraries, UI frameworks, services, resident injectors, or upstream source trees before the owning milestone requires them.
+- Node must not run inside `cloudmusic.exe`. Normal project development and release packaging must not require or ship a separate Node toolchain, package manager, `node_modules`, or upstream source checkout.
+- Make inspection non-invasive by default. Do not modify the NCM installation, install certificates, change system proxy settings, inject code, capture credentials, or terminate user processes without explicit task scope and a recovery plan.
+- Use out-of-source builds. Do not commit generated projects, build output, downloaded executables, private configuration, runtime logs, or user data.
+- Before editing, inspect `git status`. Preserve unrelated work and make focused commits using concise prefixes such as `docs:`, `build:`, `feat:`, `test:`, or `fix:`. Do not push unless explicitly requested.
+- Define the changed claim before verification. Prefer the smallest fresh build, test, static inspection, or runtime check that can falsify it, and record material evidence boundaries in the current plan or research report.
+- When adopting third-party code or binaries, verify the authoritative upstream, version, license, redistribution terms, architecture, and runtime interface. Pin dependencies through the repository's declared workflow; do not vendor reference projects wholesale.
