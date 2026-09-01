@@ -50,6 +50,12 @@ The running client had no explicit Chromium proxy command-line switch. Together 
 
 The repository's `ncm_proxy_observer` provides the safe endpoint for the next controlled experiment. It binds exclusively to `127.0.0.1`, stops after a bounded event count or idle time, retains only method/target-form/scheme/destination-class/port/completeness, and returns 502 without forwarding. A synthetic socket check produced one absolute-form HTTP event and one HTTPS `CONNECT` event while test paths, query values, and authorization data remained absent from output. This validates the observer, not NCM behavior.
 
+### Process-local proxy experiment
+
+A controlled launch started the exact target from its installation directory with `--proxy-server=http://127.0.0.1:<ephemeral-port>`. The root process command line contained that exact argument, but the observer received zero requests during the 15-second startup window. In the same window, the root process established connections on ports 80 and 443 through other paths. This falsifies the narrow claim that the Chromium command-line flag provides NCM-wide startup routing; it does not prove that every CEF request ignores the flag or establish playback behavior.
+
+The normal main-window close request activated NCM's close-to-tray behavior rather than exiting the process. The harness did not force termination or overwrite live private state. The user-level Internet proxy remained exactly unchanged. A read-only comparison found `localdata` content, attributes, and owner/group/DACL unchanged, while creation/write timestamps differed after launch. A restricted temporary recovery bundle is retained until NCM exits through its tray menu; restoration and cleanup are therefore not yet claimed complete. No certificate state was changed.
+
 ## Upstream v0.28.0 checkpoint
 
 The official [v0.28.0 release](https://github.com/UnblockNeteaseMusic/server/releases/tag/v0.28.0) provides Windows x64 and ARM64 standalone executables, but no x86 executable. The sidecar therefore follows OS architecture rather than the x86 client architecture. Its official [build workflow](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/.github/workflows/build-binaries.yml) uses `pkg` Node 18 targets, so the standalone contains its runtime and does not require a separately installed Node toolchain.
