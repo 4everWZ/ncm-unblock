@@ -29,3 +29,14 @@ add_test(
   NAME loopback_port_pair_tests
   COMMAND loopback_port_pair_tests $<TARGET_FILE:managed_process_test_child>
 )
+
+add_executable(unm_sidecar_tests unm_sidecar_tests.cpp)
+target_link_libraries(
+  unm_sidecar_tests
+  PRIVATE ncm_launcher_unm_sidecar ncm_launcher_loopback_ports ncm_project_options
+)
+
+add_test(
+  NAME unm_sidecar_tests
+  COMMAND unm_sidecar_tests $<TARGET_FILE:managed_process_test_child>
+)
