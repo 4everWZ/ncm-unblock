@@ -232,6 +232,31 @@ std::string run_resolve_failure_probe(const std::wstring& proxy_path) {
   return {};
 }
 
+// The bootstrap must resolve the backend on its own thread, without the host
+// ever calling a forwarded export. Nothing here touches the proxy after the
+// load, so a backend that appears can only have come from the bootstrap.
+std::string run_bootstrap_probe(const std::wstring& proxy_path, const std::wstring& backend_path) {
+  require_no_preloaded_winmm();
+  require(GetModuleHandleW(backend_path.c_str()) == nullptr,
+          "the backend was already loaded before the proxy");
+
+  const HMODULE proxy = LoadLibraryW(proxy_path.c_str());
+  require(proxy != nullptr, "the proxy fixture did not load: " + describe(GetLastError()));
+
+  HMODULE backend{};
+  for (unsigned attempt = 0; attempt < 200 && backend == nullptr; ++attempt) {
+    Sleep(25);
+    backend = GetModuleHandleW(backend_path.c_str());
+  }
+  require(backend != nullptr,
+          "the bootstrap did not resolve the backend without a forwarded call");
+  require(backend != proxy, "the bootstrap resolved the proxy as its own backend");
+
+  return "bootstrap: backend-resolved=yes proxy=" +
+      std::to_string(reinterpret_cast<uintptr_t>(proxy)) + " backend=" +
+      std::to_string(reinterpret_cast<uintptr_t>(backend));
+}
+
 // Exercises the production proxy against the real system WinMM.
 //
 // Nothing is called with fabricated arguments: most WinMM entry points have
@@ -365,6 +390,11 @@ int wmain(int argument_count, wchar_t** arguments) {
       report = run_resolve_failure_probe(module);
     } else if (mode == L"systembackend") {
       report = run_system_backend_probe(module);
+    } else if (mode == L"bootstrap") {
+      if (argument_count != 5) {
+        return 2;
+      }
+      report = run_bootstrap_probe(module, arguments[4]);
     } else {
       return 2;
     }

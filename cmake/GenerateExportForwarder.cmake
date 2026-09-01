@@ -73,6 +73,14 @@ if(entry_count EQUAL 0)
   message(FATAL_ERROR "manifest ${MANIFEST} declares no exports")
 endif()
 
+list(GET ordinals 0 ordinal_base)
+set(name_count 0)
+foreach(name IN LISTS names)
+  if(NOT name STREQUAL "-")
+    math(EXPR name_count "${name_count} + 1")
+  endif()
+endforeach()
+
 foreach(alias IN LISTS aliases)
   if(NOT alias EQUAL 0 AND NOT alias IN_LIST ordinals)
     message(FATAL_ERROR "manifest alias target ${alias} is not an exported ordinal")
@@ -146,6 +154,8 @@ string(APPEND export_table
        "}  // namespace\n\n"
        "const export_entry* pinned_exports(unsigned* count) noexcept {\n"
        "  if (count != nullptr) {\n    *count = ${entry_count};\n  }\n  return table;\n}\n\n"
+       "surface_shape pinned_shape() noexcept {\n"
+       "  return {${ordinal_base}, ${entry_count}, ${name_count}};\n}\n\n"
        "}  // namespace ncm::winmm_proxy\n")
 string(APPEND thunks "\n}  // extern \"C\"\n")
 string(APPEND backend_impl "\n}  // extern \"C\"\n")

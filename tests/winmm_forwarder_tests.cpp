@@ -64,6 +64,7 @@ class staged_tree {
     require(std::filesystem::create_directory(root_), "unable to create the staging directory");
     try {
       forward_probe_ = stage_probe(probe, L"forward");
+      bootstrap_probe_ = stage_probe(probe, L"bootstrap");
       control_probe_ = stage_probe(probe, L"control");
       backend_ = root_ / L"backend" / L"winmm.dll";
       require(std::filesystem::create_directory(backend_.parent_path()),
@@ -89,6 +90,7 @@ class staged_tree {
   }
 
   [[nodiscard]] const std::filesystem::path& forward_probe() const noexcept { return forward_probe_; }
+  [[nodiscard]] const std::filesystem::path& bootstrap_probe() const noexcept { return bootstrap_probe_; }
   [[nodiscard]] const std::filesystem::path& control_probe() const noexcept { return control_probe_; }
   [[nodiscard]] const std::filesystem::path& backend() const noexcept { return backend_; }
   [[nodiscard]] std::filesystem::path report_path(const wchar_t* name) const {
@@ -119,7 +121,7 @@ class staged_tree {
     for (const auto& item : staged_) {
       std::filesystem::remove(item, status);
     }
-    for (const auto& directory : {L"forward", L"control", L"backend"}) {
+    for (const auto& directory : {L"forward", L"bootstrap", L"control", L"backend"}) {
       std::filesystem::remove(root_ / directory, status);
     }
     for (const auto& item : std::filesystem::directory_iterator(root_, status)) {
@@ -130,6 +132,7 @@ class staged_tree {
 
   std::filesystem::path root_;
   std::filesystem::path forward_probe_;
+  std::filesystem::path bootstrap_probe_;
   std::filesystem::path control_probe_;
   std::filesystem::path backend_;
   std::vector<std::filesystem::path> staged_;
@@ -276,6 +279,65 @@ void test_unreachable_backend_fails_closed(staged_tree& tree) {
           "the probe kept running after an unreachable backend: " + outcome.report);
 }
 
+// The bootstrap must reach the backend on its own, off the loader lock, rather
+// than leaving the module load to whichever thunk the host calls first.
+void test_bootstrap_resolves_without_a_forwarded_call(
+    staged_tree& tree, const std::filesystem::path& proxy_fixture) {
+  const auto proxy = tree.place_proxy(proxy_fixture, tree.bootstrap_probe());
+  const auto report = tree.report_path(L"bootstrap.txt");
+  const scoped_environment backend_variable(
+      L"NCM_WINMM_FIXTURE_BACKEND", tree.backend().wstring());
+
+  const auto outcome = run_probe(
+      tree.bootstrap_probe(),
+      {L"bootstrap", proxy.wstring(), report.wstring(), tree.backend().wstring()}, report);
+  require(outcome.exit_code == 0,
+          "the bootstrap probe failed (" + std::to_string(outcome.exit_code) + "): " +
+              outcome.report);
+  require(outcome.report.find("backend-resolved=yes") != std::string::npos,
+          "the bootstrap did not resolve the backend on its own: " + outcome.report);
+}
+
+// The decision behind `surface_mismatch`: because resolution already proves the
+// pinned entries exist in the backend, an equal export-directory shape is what
+// separates "this host is the surface we pin" from "this host exports entries
+// this build would silently shadow".
+void test_surface_shape_separates_hosts(
+    const std::filesystem::path& backend_fixture, const std::filesystem::path& control_fixture) {
+  const auto pinned = ncm::winmm_proxy::pinned_shape();
+  require(pinned.ordinal_base == 2 && pinned.function_count == 193 && pinned.name_count == 192,
+          "the pinned shape is not the captured WinMM shape");
+
+  const HMODULE backend = LoadLibraryW(backend_fixture.c_str());
+  require(backend != nullptr, "the backend fixture did not load");
+  ncm::winmm_proxy::surface_shape matching{};
+  require(ncm::winmm_proxy::module_surface_shape(backend, &matching),
+          "the backend fixture has no readable export directory");
+  require(matching.ordinal_base == pinned.ordinal_base &&
+              matching.function_count == pinned.function_count &&
+              matching.name_count == pinned.name_count,
+          "a backend built from the manifest did not report the pinned shape");
+
+  // The control is the same manifest minus the entry a `.def` forwarder cannot
+  // express, so it is a real host that must be classified as different.
+  const HMODULE control = LoadLibraryW(control_fixture.c_str());
+  require(control != nullptr, "the control fixture did not load");
+  ncm::winmm_proxy::surface_shape differing{};
+  require(ncm::winmm_proxy::module_surface_shape(control, &differing),
+          "the control fixture has no readable export directory");
+  require(differing.ordinal_base != pinned.ordinal_base ||
+              differing.function_count != pinned.function_count ||
+              differing.name_count != pinned.name_count,
+          "a host with a different surface was reported as matching");
+
+  ncm::winmm_proxy::surface_shape ignored{};
+  require(!ncm::winmm_proxy::module_surface_shape(nullptr, &ignored),
+          "a null module was accepted as a surface");
+
+  FreeLibrary(control);
+  FreeLibrary(backend);
+}
+
 }  // namespace
 
 int wmain(int argument_count, wchar_t** arguments) {
@@ -288,9 +350,11 @@ int wmain(int argument_count, wchar_t** arguments) {
     const auto control_fixture = std::filesystem::canonical(arguments[4]);
 
     test_pinned_surface_is_complete();
+    test_surface_shape_separates_hosts(backend_fixture, control_fixture);
 
     staged_tree tree(probe, backend_fixture);
     test_absolute_path_backend_is_distinct(tree, proxy_fixture);
+    test_bootstrap_resolves_without_a_forwarded_call(tree, proxy_fixture);
     test_unreachable_backend_fails_closed(tree);
     test_def_forwarder_cannot_reach_a_backend(tree, control_fixture);
 

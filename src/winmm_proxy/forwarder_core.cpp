@@ -26,6 +26,9 @@ struct resolve_request {
   unsigned count;
 };
 
+INIT_ONCE g_resolve_once = INIT_ONCE_STATIC_INIT;
+void* g_backend{};
+
 // Resolves the backend by absolute path only. A module name would be resolved
 // through the loader's search order, which finds this proxy first whenever the
 // proxy carries the backend's own file name.
@@ -86,13 +89,16 @@ BOOL CALLBACK resolve_once(PINIT_ONCE, PVOID parameter, PVOID*) noexcept {
   // Every target is stored before the thunks are allowed to stop calling here.
   // The interlocked write is a full barrier, and x86 does not reorder the
   // dependent loads a thunk performs afterwards.
+  InterlockedExchangePointer(&g_backend, backend);
   InterlockedExchange(request.state, 1);
   return TRUE;
 }
 
-INIT_ONCE g_resolve_once = INIT_ONCE_STATIC_INIT;
-
 }  // namespace
+
+void* resolved_backend() noexcept {
+  return InterlockedCompareExchangePointer(&g_backend, nullptr, nullptr);
+}
 
 void resolve_backend(long* state, void** targets, unsigned count) noexcept {
   if (state == nullptr || targets == nullptr || count == 0) {
@@ -101,6 +107,16 @@ void resolve_backend(long* state, void** targets, unsigned count) noexcept {
   resolve_request request{state, targets, count};
   if (InitOnceExecuteOnce(&g_resolve_once, resolve_once, &request, nullptr) == 0) {
     fail_closed(L"backend resolution did not complete");
+  }
+}
+
+// Defined by the generated thunk translation unit, which owns the only thunk
+// table in this module.
+extern "C" void __cdecl ncm_winmm_resolve(void);
+
+void ensure_backend_resolved() noexcept {
+  if (resolved_backend() == nullptr) {
+    ncm_winmm_resolve();
   }
 }
 

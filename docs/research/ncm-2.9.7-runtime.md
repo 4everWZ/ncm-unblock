@@ -99,6 +99,16 @@ Isolation boundary: redirecting `%LOCALAPPDATA%` for the child does not contain 
 
 This clears the isolated-start gate for a pure forwarder. It does not establish playback, request routing, long-run stability, or any bootstrap behavior: the proxy still does nothing but forward.
 
+### Loader-lock handoff and host-surface verification
+
+The proxy's `DllMain` only disables thread notifications and hands a body to a private thread. Windows does not run a thread created during `DLL_PROCESS_ATTACH` until the loader lock is released, so the body cannot execute inside the notification that scheduled it. A focused test blocks the body on an event and asserts that scheduling returns promptly, that the body has not finished while blocked, that its ordering ticket is later than one taken after scheduling returned, and that it ran on another thread; an implementation that inlined the work would fail on the budget rather than pass by chance.
+
+The body resolves the backend itself. Doing it there rather than leaving it to the first thunk keeps the module load off whichever thread the host happens to call WinMM from, which is the one place the forwarder would otherwise call `LoadLibrary` while another module holds the loader lock. A probe that loads the proxy and calls nothing observes the backend appear in the process, so the bootstrap reaches it unaided.
+
+It then compares the backend's export directory against the shape the manifest pins. Resolution already proves every pinned entry exists in the host, so an equal ordinal base, function count, and name count is what remains to establish that the two surfaces are the same. The repository's backend fixture reports the pinned `2/193/192`; the negative control, which is the same manifest minus the entry a `.def` forwarder cannot express, reports `3/192/192` and is classified as different.
+
+Re-running both isolated client runs with the handoff active reproduced the earlier outcomes: the release proxy reaches the main window, and the unresolvable fixture stops the client with `0xE0C40001`. The control now proves that the client loaded the proxy and ran its bootstrap; it no longer isolates a forwarded call, because the bootstrap resolves without waiting for one. The call-through evidence remains the pre-handoff pair recorded above, where only a thunk could have triggered resolution.
+
 ## Client-local proxy checkpoint
 
 Read-only inspection found no CloudMusic proxy values under the current user's NetEase registry keys or in the readable server-provided JSON configuration files. Installed `cloudmusic.dll` strings associate `%LOCALAPPDATA%\Netease\CloudMusic\localdata` with `AppConfig::SaveConfigAsync` and `Config.Proxy` fields `Type`, `Host`, `Port`, `UserName`, and `Password`. The file uses an opaque private encoding and was not decoded or rewritten; direct byte editing is not a supported experiment path.

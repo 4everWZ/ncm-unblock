@@ -92,7 +92,7 @@ add_library(winmm_proxy_fixture SHARED
   "${NCM_WINMM_GENERATED_DIR}/winmm_proxy_thunks.cpp"
   "${NCM_WINMM_GENERATED_DIR}/winmm_proxy.def"
 )
-target_link_libraries(winmm_proxy_fixture PRIVATE ncm_winmm_forwarder ncm_project_options)
+target_link_libraries(winmm_proxy_fixture PRIVATE ncm_winmm_dll_main ncm_winmm_forwarder ncm_project_options)
 ncm_add_winmm_fixture(winmm_proxy_fixture winmm_proxy)
 
 # The falsified alternative, kept buildable so the claim stays testable.
@@ -126,3 +126,8 @@ add_test(
     $<TARGET_FILE:winmm_backend_fixture>
     $<TARGET_FILE:winmm_selfforward_fixture>
 )
+
+add_executable(deferred_start_tests deferred_start_tests.cpp)
+target_link_libraries(deferred_start_tests PRIVATE ncm_bootstrap ncm_project_options)
+
+add_test(NAME deferred_start_tests COMMAND deferred_start_tests)

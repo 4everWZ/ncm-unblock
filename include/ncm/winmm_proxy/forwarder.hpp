@@ -14,6 +14,31 @@ struct export_entry {
 // The pinned surface generated from the committed export manifest.
 [[nodiscard]] const export_entry* pinned_exports(unsigned* count) noexcept;
 
+// Shape of an export directory, which is what distinguishes two surfaces once
+// membership is known.
+struct surface_shape {
+  unsigned short ordinal_base;
+  unsigned short function_count;
+  unsigned short name_count;
+};
+
+// The shape the committed manifest pins.
+[[nodiscard]] surface_shape pinned_shape() noexcept;
+
+// Reads a loaded module's export directory shape. Returns false when the module
+// is not a PE32 image with a usable export directory.
+[[nodiscard]] bool module_surface_shape(void* module, surface_shape* shape) noexcept;
+
+// The backend module the forwarder resolved, or nullptr before resolution.
+[[nodiscard]] void* resolved_backend() noexcept;
+
+// Resolves the backend now if a forwarded call has not already done so.
+//
+// Resolution loads a module, so a caller that can choose when to resolve should
+// do it here, on a thread that does not hold the loader lock, rather than
+// leaving it to whichever thunk the host happens to call first.
+void ensure_backend_resolved() noexcept;
+
 // Absolute path of the backend module to forward to. Each hosting DLL supplies
 // its own implementation so the core never guesses a location, and so a test
 // fixture can point at a synthetic backend without a production switch.
