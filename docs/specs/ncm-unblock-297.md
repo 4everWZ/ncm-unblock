@@ -23,7 +23,7 @@
 ### DLL delivery behavior
 
 1. Verify the exact NCM 2.9.7.199711 image, the accepted DLL load boundary, the bootstrap DLL, and the configured UNM core.
-2. Preserve the selected proxy DLL's complete name/ordinal export contract and forward it to a verified system backend without self-forwarding or OS-build ambiguity.
+2. Preserve the selected proxy DLL's complete name/ordinal export contract and forward it to a verified system backend without self-forwarding or OS-build ambiguity. Completeness means every ordinal slot, every exported name, and every unnamed ordinal of the backend surface, not the subset the current client happens to import.
 3. Leave loader lock before starting bootstrap work; load configuration and initialize one NCM-session owner.
 4. Acquire exclusive loopback leases for an available HTTP/HTTPS port pair, honoring explicitly configured fixed ports only when both can be bound safely. Because the unmodified sidecar cannot accept inherited listener sockets, keep both leases until the suspended sidecar is owned by its private job, then release them immediately before resume. Automatic mode retries the entire handoff within a fixed budget; a configured fixed pair fails without silently changing ports.
 5. Start the sidecar with explicit loopback binding and restricted proxy arguments. Readiness requires a live managed tree, both loopback listeners owned by processes in that private job, and a successful local PAC response where supported; it is not provider or playback health.
@@ -37,6 +37,7 @@ The exact NCM proxy-setting mechanism, existing-instance behavior, multi-process
 - Configuration is a human-readable file stored beside the bootstrap package or in its portable data directory. Registry and database storage are excluded from the first DLL deliverable.
 - Configuration must distinguish automatic port selection from an explicit fixed port. Source ordering and quality options are passed through only after they are verified against the pinned sidecar interface.
 - Downloaded binaries, user configuration, certificates, and runtime logs are not source-controlled.
+- Placing the proxy DLL into an NCM installation is a deliverable of the reversible deployment feature, not a development affordance. It requires an implemented and authorized exact-version install/update/rollback contract; until then, investigation stays non-invasive and uses isolated copies.
 - Third-party redistribution requires recorded upstream identity, version, license, architecture, runtime interface, corresponding-source path, required notices, and redistribution terms before an artifact enters a release.
 - Publicly shared upstream private keys or expired leaf certificates are not accepted as the product trust design. If HTTPS interception proves necessary, certificate generation, storage, narrowly scoped trust, renewal, removal, and failure recovery require a separate accepted design and explicit user authorization before trust-store mutation.
 
@@ -44,6 +45,8 @@ The exact NCM proxy-setting mechanism, existing-instance behavior, multi-process
 
 - Compatibility of NCM 2.9.7 through a localhost UNM proxy is a go/no-go gate for the DLL deliverable.
 - The current host accepts an application-directory WinMM before NCM initialization. Normal execution remains gated on complete WinMM export parity, a distinct verified system backend that cannot self-forward, a loader-lock-safe bootstrap trigger, and reversible deployment.
+- The backend must be reached without renaming or redistributing a host system DLL and without a name-resolved PE forwarder. Both are rejected: a same-named proxy's forwarder string resolves back to the proxy, and a renamed system copy leaves module identity, servicing/build coupling, its dependency closure, and redistribution terms unresolved.
+- Export parity, backend identity, and x86 ABI behavior are validated against repository-owned synthetic fixtures and synthetic processes before any experiment starts the real client through a proxy.
 - Suspended-process injection, inline hooks, and selective proxying remain separate fallback/evolution gates. MinHook is not a dependency until an accepted routing design requires inline hooking.
 - Performance budgets are set from a documented baseline rather than from the provisional numbers in input material.
 

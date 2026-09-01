@@ -51,6 +51,14 @@ On this host, the control copy without a local candidate loaded `C:\Windows\SysW
 
 This is positive evidence that the current Windows build, x86 loader policy, and exact NCM root accept an application-directory WinMM before DLL initialization or application entry. It is not evidence that a custom forwarder is export-complete, that full NCM startup from an isolated directory is supported, that an installed-directory change is acceptable, or that a WinMM-loaded component can safely establish the required proxy routing. Those remain separate design and runtime gates.
 
+### WinMM export surface
+
+`dumpbin /exports C:\Windows\SysWOW64\winmm.dll` on this host (`10.0.26100.8972`) reports ordinal base 2, 193 functions, and 192 names. Every ordinal in `2`–`194` is populated with no holes, the single unnamed export is ordinal 2, and its RVA is the same entry point as the named `PlaySound` at ordinal 11. No entry is a PE forwarder. Offline static inspection of the root executable and the conditionally loaded NCM/CEF module closure found 48 distinct imported WinMM names and no ordinal imports.
+
+A proxy limited to the 48 currently imported names would therefore link against today's static imports while silently breaking any `GetProcAddress` name lookup, any ordinal lookup, and the unnamed ordinal 2 alias. Export parity for a candidate proxy means all 193 ordinal slots, all 192 names, and the unnamed ordinal 2 — not the observed import subset. This inventory is pinned to one host build; a supported-build portability rule is still an open design question.
+
+A `.def` forwarder is not a usable backend mechanism here. A proxy that is itself named `winmm.dll` and declares `symbol=WINMM.symbol` emits a PE forwarder string that the loader resolves by module name, which resolves back to the already-loaded proxy in the application directory. Renaming and redistributing the host system WinMM as a differently named backend is separately rejected: module identity, OS servicing and build coupling, its own dependency closure, and redistribution terms are all unresolved. A viable backend must therefore be reached by absolute system path at runtime rather than by name.
+
 ## Client-local proxy checkpoint
 
 Read-only inspection found no CloudMusic proxy values under the current user's NetEase registry keys or in the readable server-provided JSON configuration files. Installed `cloudmusic.dll` strings associate `%LOCALAPPDATA%\Netease\CloudMusic\localdata` with `AppConfig::SaveConfigAsync` and `Config.Proxy` fields `Type`, `Host`, `Port`, `UserName`, and `Password`. The file uses an opaque private encoding and was not decoded or rewritten; direct byte editing is not a supported experiment path.

@@ -31,3 +31,11 @@ Run the bounded loopback proxy observer for controlled experiments:
 ```
 
 The observer binds exclusively to `127.0.0.1`, prints only classified request metadata, never logs raw hosts, paths, query strings, headers, or bodies, and rejects every request with HTTP 502. It is an investigation tool, not a forwarding proxy.
+
+Reproduce the isolated pre-entry WinMM load experiment:
+
+```powershell
+./tools/probe-ncm-winmm-load.ps1
+```
+
+The run launches only isolated signed copies of the exact target, never the installed client. Expected evidence on a host that accepts an application-directory WinMM is a control load from `C:\Windows\SysWOW64\winmm.dll`, a treatment load from the private temporary experiment directory, `debug-events: 20` for both, no remaining `cloudmusic.exe` process, and no leftover `ncm-unblock-297-winmm-probe-*` directory.
