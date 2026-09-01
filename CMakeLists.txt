@@ -31,6 +31,7 @@ add_subdirectory(src/module_load_probe)
 add_subdirectory(src/proxy_observer)
 add_subdirectory(src/launcher)
 add_subdirectory(src/bootstrap)
+add_subdirectory(src/config)
 add_subdirectory(src/winmm_proxy)
 
 if(BUILD_TESTING)

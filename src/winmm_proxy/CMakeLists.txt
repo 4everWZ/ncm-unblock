@@ -39,7 +39,7 @@ target_link_libraries(ncm_winmm_forwarder PUBLIC ncm_winmm_export_table ncm_proj
 
 # The bootstrap body this proxy hands to the deferred start.
 add_library(ncm_winmm_session STATIC session.cpp)
-target_link_libraries(ncm_winmm_session PUBLIC ncm_winmm_forwarder ncm_project_options)
+target_link_libraries(ncm_winmm_session PUBLIC ncm_winmm_forwarder ncm_config ncm_project_options)
 
 # Entry point shared with the parity fixture so both DLLs bootstrap identically.
 add_library(ncm_winmm_dll_main INTERFACE)

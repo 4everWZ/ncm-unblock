@@ -4,12 +4,14 @@
 
 #include <Windows.h>
 
-#include <iterator>
+#include <cstdio>
+#include <filesystem>
 
 namespace ncm::winmm_proxy {
 namespace {
 
 long g_result{static_cast<long>(session_result::pending)};
+config::settings g_settings{};
 
 void publish(session_result result) noexcept {
   InterlockedExchange(&g_result, static_cast<long>(result));
@@ -32,10 +34,76 @@ void report_shape(const wchar_t* label, const surface_shape& shape) noexcept {
   }
 }
 
+void report_configuration_error(const config::load_result& loaded) noexcept {
+  wchar_t line[512]{};
+  // Truncate rather than fault: a diagnostic is never worth an invalid-parameter
+  // handler inside the host process.
+  if (loaded.line == 0) {
+    if (_snwprintf_s(
+            line, _TRUNCATE, L"configuration: %s", loaded.diagnostic.c_str()) != 0) {
+      report(line);
+    }
+    return;
+  }
+  if (_snwprintf_s(
+          line, _TRUNCATE, L"configuration line %u: %s", loaded.line,
+          loaded.diagnostic.c_str()) != 0) {
+    report(line);
+  }
+}
+
+// Reads the package configuration once the surface is verified. An absent file
+// means "run with this build's defaults"; a present but unusable file means the
+// user stated an intent this build cannot honor, so the feature is declined
+// rather than approximated. Neither outcome may stop a working client.
+void apply_configuration() noexcept {
+  try {
+    const std::filesystem::path package = config::package_directory();
+    if (package.empty()) {
+      report(L"the package directory could not be determined,"
+             L" so no configuration was applied");
+      publish(session_result::configuration_invalid);
+      return;
+    }
+
+    const config::load_result loaded = config::load_settings(package);
+    if (loaded.status == config::load_status::invalid) {
+      report(L"the configuration file was rejected; forwarding continues but no"
+             L" routing is installed");
+      report_configuration_error(loaded);
+      publish(session_result::configuration_invalid);
+      return;
+    }
+
+    g_settings = loaded.value;
+    if (loaded.status == config::load_status::defaults_used) {
+      report(L"no configuration file was found; this build's defaults apply");
+    }
+    if (!g_settings.enabled) {
+      report(L"the configuration turns the feature off; forwarding continues"
+             L" but no routing is installed");
+      publish(session_result::disabled);
+      return;
+    }
+
+    publish(session_result::configured);
+  } catch (...) {
+    // Configuration handling allocates, and a bootstrap failure must never
+    // become a host failure.
+    report(L"the configuration could not be processed;"
+           L" forwarding continues but no routing is installed");
+    publish(session_result::configuration_invalid);
+  }
+}
+
 }  // namespace
 
 session_result current_session_result() noexcept {
   return static_cast<session_result>(InterlockedCompareExchange(&g_result, 0, 0));
+}
+
+const config::settings& session_settings() noexcept {
+  return g_settings;
 }
 
 void prepare_session() noexcept {
@@ -75,6 +143,7 @@ void prepare_session() noexcept {
   }
 
   publish(session_result::verified);
+  apply_configuration();
 }
 
 }  // namespace ncm::winmm_proxy

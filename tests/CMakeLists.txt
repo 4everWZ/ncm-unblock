@@ -131,3 +131,8 @@ add_executable(deferred_start_tests deferred_start_tests.cpp)
 target_link_libraries(deferred_start_tests PRIVATE ncm_bootstrap ncm_project_options)
 
 add_test(NAME deferred_start_tests COMMAND deferred_start_tests)
+
+add_executable(config_settings_tests config_settings_tests.cpp)
+target_link_libraries(config_settings_tests PRIVATE ncm_config ncm_project_options ole32)
+
+add_test(NAME config_settings_tests COMMAND config_settings_tests)
