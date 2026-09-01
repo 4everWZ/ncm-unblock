@@ -47,6 +47,7 @@ The exact NCM proxy-setting mechanism, existing-instance behavior, multi-process
 - The current host accepts an application-directory WinMM before NCM initialization. Normal execution remains gated on complete WinMM export parity, a distinct verified system backend that cannot self-forward, a loader-lock-safe bootstrap trigger, and reversible deployment.
 - The backend must be reached without renaming or redistributing a host system DLL and without a name-resolved PE forwarder. Both are rejected: a same-named proxy's forwarder string resolves back to the proxy, and a renamed system copy leaves module identity, servicing/build coupling, its dependency closure, and redistribution terms unresolved.
 - Export parity, backend identity, and x86 ABI behavior are validated against repository-owned synthetic fixtures and synthetic processes before any experiment starts the real client through a proxy.
+- The pinned export surface is captured from one Windows build. A proxy must state which host surfaces it accepts and fail with actionable information rather than forward a partial surface.
 - Suspended-process injection, inline hooks, and selective proxying remain separate fallback/evolution gates. MinHook is not a dependency until an accepted routing design requires inline hooking.
 - Performance budgets are set from a documented baseline rather than from the provisional numbers in input material.
 
@@ -72,5 +73,5 @@ The exact NCM proxy-setting mechanism, existing-instance behavior, multi-process
 - If HTTPS interception is required, can it be implemented with an acceptable per-user certificate lifecycle, or must the routing design change?
 - How should bootstrap ownership behave across NCM's existing-instance and multi-process startup paths?
 - Which process set defines the end of an NCM session?
-- Which complete WinMM backend/forwarding mechanism avoids self-forwarding while remaining portable across supported Windows builds?
+- Which Windows builds share the pinned WinMM export surface, and how should a proxy behave when the host surface differs from the one it was built against?
 - What reversible installer/portable deployment contract may place the proxy DLL for the user without treating research-time installation mutation as implicit authorization?

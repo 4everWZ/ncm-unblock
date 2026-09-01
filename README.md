@@ -39,3 +39,7 @@ Reproduce the isolated pre-entry WinMM load experiment:
 ```
 
 The run launches only isolated signed copies of the exact target, never the installed client. Expected evidence on a host that accepts an application-directory WinMM is a control load from `C:\Windows\SysWOW64\winmm.dll`, a treatment load from the private temporary experiment directory, `debug-events: 20` for both, no remaining `cloudmusic.exe` process, and no leftover `ncm-unblock-297-winmm-probe-*` directory.
+
+## WinMM proxy surface
+
+The pinned WinMM export surface lives in [src/winmm_proxy/winmm.exports](src/winmm_proxy/winmm.exports). It generates the proxy's export table and thunks alongside the synthetic backend and negative-control fixtures the tests exercise, so the parity contract has one source. Building the proxy does not deploy it; nothing writes into an NCM installation.
