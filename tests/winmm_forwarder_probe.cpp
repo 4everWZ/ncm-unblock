@@ -232,6 +232,68 @@ std::string run_resolve_failure_probe(const std::wstring& proxy_path) {
   return {};
 }
 
+// Exercises the production proxy against the real system WinMM.
+//
+// Nothing is called with fabricated arguments: most WinMM entry points have
+// device or timer side effects. `mmsystemGetVersion` takes no arguments and
+// returns a constant, and because resolution is all-or-nothing, one successful
+// forwarded call proves every pinned entry resolved in the host module.
+std::string run_system_backend_probe(const std::wstring& proxy_path) {
+  require_no_preloaded_winmm();
+
+  const HMODULE proxy = LoadLibraryW(proxy_path.c_str());
+  require(proxy != nullptr, "the proxy did not load: " + describe(GetLastError()));
+  require(GetModuleHandleW(L"winmm.dll") == proxy,
+          "the proxy did not take ownership of the winmm.dll base name");
+
+  unsigned count{};
+  const auto* entries = ncm::winmm_proxy::pinned_exports(&count);
+  require(entries != nullptr && count != 0, "the pinned export table is unavailable");
+
+  using version_export = unsigned int(__stdcall*)();
+  const auto via_proxy = reinterpret_cast<version_export>(GetProcAddress(proxy, "mmsystemGetVersion"));
+  require(via_proxy != nullptr, "the proxy does not export mmsystemGetVersion");
+  const auto proxy_version = via_proxy();
+
+  wchar_t system_directory[MAX_PATH]{};
+  const auto directory_length =
+      GetSystemDirectoryW(system_directory, static_cast<UINT>(std::size(system_directory)));
+  require(directory_length != 0 && directory_length < std::size(system_directory),
+          "the system directory is unavailable");
+  const std::wstring system_path = std::wstring(system_directory, directory_length) + L"\\winmm.dll";
+
+  const HMODULE system_module = GetModuleHandleW(system_path.c_str());
+  require(system_module != nullptr,
+          "the proxy did not load the system module while resolving its backend");
+  require(system_module != proxy, "the system backend resolved to the proxy module itself");
+  require(same_path(module_path(system_module), system_path),
+          "the resolved backend is not the system module");
+
+  const auto via_system =
+      reinterpret_cast<version_export>(GetProcAddress(system_module, "mmsystemGetVersion"));
+  require(via_system != nullptr, "the system module does not export mmsystemGetVersion");
+  require(proxy_version == via_system(),
+          "the forwarded mmsystemGetVersion result did not match the system module");
+
+  unsigned missing = 0;
+  for (unsigned index = 0; index < count; ++index) {
+    const auto key = lookup_key(entries[index]);
+    require(GetProcAddress(proxy, key) != nullptr,
+            "the proxy does not export " + entry_label(entries[index]));
+    if (GetProcAddress(system_module, key) == nullptr) {
+      ++missing;
+    }
+  }
+  require(missing == 0,
+          "the host WinMM is missing " + describe(missing) + " pinned entries");
+
+  std::string report = "systembackend: entries=" + std::to_string(count) +
+      " version=" + describe(proxy_version) + " distinct=yes backend=";
+  const auto resolved = module_path(system_module);
+  report.append(resolved.begin(), resolved.end());
+  return report;
+}
+
 // Negative control: a `.def` that forwards to the module name the proxy itself
 // carries. Nothing here is ever called; only where the loader points is
 // observed.
@@ -301,6 +363,8 @@ int wmain(int argument_count, wchar_t** arguments) {
       report = run_self_forward_probe(module);
     } else if (mode == L"resolvefailure") {
       report = run_resolve_failure_probe(module);
+    } else if (mode == L"systembackend") {
+      report = run_system_backend_probe(module);
     } else {
       return 2;
     }

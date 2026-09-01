@@ -43,3 +43,17 @@ The run launches only isolated signed copies of the exact target, never the inst
 ## WinMM proxy surface
 
 The pinned WinMM export surface lives in [src/winmm_proxy/winmm.exports](src/winmm_proxy/winmm.exports). It generates the proxy's export table and thunks alongside the synthetic backend and negative-control fixtures the tests exercise, so the parity contract has one source. Building the proxy does not deploy it; nothing writes into an NCM installation.
+
+Check the release proxy against this host's real WinMM:
+
+```powershell
+./tools/probe-winmm-system-backend.ps1
+```
+
+Start an isolated copy of the exact client with the proxy beside it:
+
+```powershell
+./tools/probe-ncm-winmm-proxy.ps1
+```
+
+The installed tree is copied to a private directory and never modified, the run refuses to start while any client process exists, and only processes whose image lives under that private directory are ever reclaimed. Pass `-ProxyPath` and `-FixtureBackend` to run the positive control, which points the test fixture at a backend that does not exist and expects the client to stop with the proxy's `0xE0C40001`.

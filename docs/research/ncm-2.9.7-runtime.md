@@ -72,6 +72,33 @@ This closes the `.def` forwarder route on measured evidence and establishes runt
 
 Renaming and redistributing the host system WinMM as a differently named backend stays rejected for reasons this experiment does not touch: module identity, OS servicing and build coupling, its own dependency closure, and redistribution terms.
 
+### Production proxy against the host system module
+
+`tools/probe-winmm-system-backend.ps1` stages the release proxy beside a copy of the probe in a private directory and resolves it against this host's real WinMM. All 193 pinned entries are exported by the proxy and present in the host module, the two modules are distinct, and a forwarded `mmsystemGetVersion` returned the same value as the direct call. Because resolution is all-or-nothing, one successful forwarded call establishes that every pinned entry resolved.
+
+Only `mmsystemGetVersion` is called: it takes no arguments and returns a constant, while most WinMM entry points have device or timer side effects that a probe must not trigger with fabricated arguments.
+
+The proxy resolves `GetSystemDirectoryW`, which a 32-bit process reports as `C:\WINDOWS\system32`; WOW64 file-system redirection resolves that to the SysWOW64 binary, and the loaded module path matches the requested string exactly. A caller that disabled redirection would reach the 64-bit image, where the load fails and the proxy stops the process rather than forwarding a partial surface.
+
+### Isolated full-start experiment
+
+`tools/probe-ncm-winmm-proxy.ps1` copies the installed tree into a private directory, places a proxy beside the isolated `cloudmusic.exe`, starts it, and reclaims only processes whose image lives under that directory. The installed directory is never written to; it still contains 153 files and no `winmm.dll`, and `localdata` is unchanged.
+
+Two paired runs on this host:
+
+| Run | Proxy | Backend | Root exit | Main window |
+|---|---|---|---|---|
+| A | release proxy | host system WinMM | none within 30 s | reached |
+| B | fixture proxy | a path that does not exist | `0xE0C40001` | never reached |
+
+Run B is the positive control. `0xE0C40001` is the proxy's own fail-closed code, so the exact client loaded the application-directory `winmm.dll` and called through a thunk. Run A differs only in whether the backend resolves, so its normal startup is attributable to correct forwarding rather than to the proxy being ignored. Run A needed a bounded forced close because the client minimizes to the tray instead of exiting.
+
+Method boundary: module presence is not the evidence here. `Process.Modules` reports 7 modules for the WOW64 root from a 64-bit host, far fewer than it loads, so cross-bitness enumeration cannot confirm which `winmm.dll` is mapped; the exit code can.
+
+Isolation boundary: redirecting `%LOCALAPPDATA%` for the child does not contain this client, which read the real user profile and music library. Client-local state is instead protected by refusing to run while any client process exists, taking a private pre-run copy of `localdata`, and verifying it afterwards; every run left it byte-identical. Registry writes under `HKCU\Software\Netease` are outside the boundary.
+
+This clears the isolated-start gate for a pure forwarder. It does not establish playback, request routing, long-run stability, or any bootstrap behavior: the proxy still does nothing but forward.
+
 ## Client-local proxy checkpoint
 
 Read-only inspection found no CloudMusic proxy values under the current user's NetEase registry keys or in the readable server-provided JSON configuration files. Installed `cloudmusic.dll` strings associate `%LOCALAPPDATA%\Netease\CloudMusic\localdata` with `AppConfig::SaveConfigAsync` and `Config.Proxy` fields `Type`, `Host`, `Port`, `UserName`, and `Password`. The file uses an opaque private encoding and was not decoded or rewritten; direct byte editing is not a supported experiment path.
