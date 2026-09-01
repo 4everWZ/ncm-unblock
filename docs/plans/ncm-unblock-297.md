@@ -16,7 +16,7 @@ The repository will provide a reproducible, non-invasive investigation path firs
 | M0: record the 2.9.7 runtime inventory | In progress | Architecture, signature, process roles, loaded network stacks, active connection ownership, and loader candidates are separated into observed facts and hypotheses | [Runtime investigation](../research/ncm-2.9.7-runtime.md); playback path and loader stability remain open |
 | M0: establish proxy and HTTPS behavior | In progress | Client-local proxy configuration, certificate behavior, traffic ownership, and rollback are reproducible without exposing user data | Synthetic observer and command-line negative control are complete; client UI automation did not persist a proxy change, so the UI matrix remains open |
 | M1: pin and validate an upstream UNM executable | In progress | Version, source, license, architecture, CLI, readiness, and the normal/unavailable-track workflow are recorded | v0.28.0 primary-source audit complete; artifact execution, notices, certificate design, and compatibility matrix remain open |
-| M2: implement the native launcher lifecycle | In progress | Port reservation, sidecar job ownership, readiness, NCM start/attach policy, cleanup, and diagnostics meet the specification | Private job/process and exclusive loopback-pair primitives are covered by focused integration tests; bounded retry orchestration and readiness remain |
+| M2: implement the native launcher lifecycle | In progress | Port reservation, sidecar job ownership, readiness, NCM start/attach policy, cleanup, and diagnostics meet the specification | Sidecar job ownership, loopback-pair handoff, bounded automatic retry, fixed-port failure, listener ownership, and PAC initialization are covered with a synthetic sidecar; NCM start/attach remains |
 | M3: measure the baseline | Pending | NCM-alone, standalone-UNM, and launcher-managed measurements use one documented method | Performance report |
 | Package the MVP | Pending | A portable manifest contains only approved runtime artifacts and configuration | Clean release build and manifest inspection |
 
@@ -32,6 +32,7 @@ The repository will provide a reproducible, non-invasive investigation path firs
 - The v0.28.0 bundled leaf certificate expired on 2026-07-24. The public default private-key/CA arrangement is not an acceptable product trust lifecycle, so downloading the executable would not by itself clear the HTTPS or compatibility gate.
 - The launcher process primitive creates the child suspended, assigns it to an unnamed kill-on-close job before resume, preserves Windows argv values, distinguishes root exit from job-tree completion, and verifies bounded tree termination. Tests also prove that closing the private job reclaims a grandchild while a same-image process outside that job remains active.
 - The loopback-pair primitive holds distinct HTTP/HTTPS ports with exclusive binds on `127.0.0.1`. An integration test prepares a suspended job-owned child while both leases remain held, releases the leases, resumes the child, and verifies that it can bind both ports; fixed-pair collision and post-release rebinding are also covered.
+- The UNM sidecar coordinator appends the audited v0.28.0 safety arguments, prevents pass-through overrides of address/ports/strict mode, keeps lease release adjacent to process resume, and requires both listeners' complete owner sets to remain inside the private job before and after a complete non-empty PAC response. Synthetic tests cover automatic retry, fixed-port identity/collision, and invalid PAC rejection; no real UNM artifact has been executed.
 
 ## Blockers
 
@@ -43,4 +44,4 @@ The repository will provide a reproducible, non-invasive investigation path firs
 
 ## Next action
 
-Implement bounded whole-attempt sidecar retry and listener/PAC readiness on top of the verified private-job and loopback-pair primitives. Keep the client UI compatibility matrix open; do not reuse the falsified command-line flag, fragile coordinate automation, system proxy, or certificate trust as a routing shortcut.
+Define and implement the NCM start/attach/session-end policy without claiming a routing mechanism that M0 has not verified. Keep the client UI compatibility matrix open; do not reuse the falsified command-line flag, fragile coordinate automation, system proxy, or certificate trust as a routing shortcut.
