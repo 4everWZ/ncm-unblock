@@ -1,11 +1,11 @@
 # NCM Unblock 2.9.7 MVP Work Plan
 
-- **Goal:** Deliver and verify a portable native launcher that runs a pinned UNM sidecar only for a managed NCM 2.9.7 session.
+- **Goal:** Deliver and verify a thin native `ncm_unblock.dll` for NCM 2.9.7.199711 that loads through a verified proxy-DLL boundary, owns a pinned UNM sidecar only for the client session, and leaves no resident injector or service. The launcher code is supporting lifecycle/harness infrastructure, not a downgraded final product.
 - **Primary contract:** [NCM Unblock 2.9.7 specification](../specs/ncm-unblock-297.md)
 
 ## Changed claim
 
-The repository will provide a reproducible, non-invasive investigation path first, then a launcher whose loopback routing and process lifecycle conform to the primary contract. Reference material under `tmp/` supplies hypotheses only.
+The repository will provide a reproducible, non-invasive investigation path first, then the DLL bootstrap and its sidecar lifecycle/routing implementation. Reference material under `tmp/` remains non-canonical evidence input, but its explicit DLL outcome is now adopted by the specification.
 
 ## Work
 
@@ -18,6 +18,8 @@ The repository will provide a reproducible, non-invasive investigation path firs
 | M1: pin and validate an upstream UNM executable | In progress | Version, source, license, architecture, CLI, readiness, and the normal/unavailable-track workflow are recorded | v0.28.0 primary-source audit complete; artifact execution, notices, certificate design, and compatibility matrix remain open |
 | M2: implement the native launcher lifecycle | In progress | Port reservation, sidecar job ownership, readiness, NCM start/attach policy, cleanup, and diagnostics meet the specification | Sidecar job ownership, loopback-pair handoff, bounded automatic retry, fixed-port failure, listener ownership, and PAC initialization are covered with a synthetic sidecar; NCM start/attach remains |
 | M3: measure the baseline | Pending | NCM-alone, standalone-UNM, and launcher-managed measurements use one documented method | Performance report |
+| M4: implement the native DLL bootstrap | In progress | The selected proxy preserves the original DLL contract, leaves loader lock before bootstrap, starts the sidecar, installs verified routing, and cleans up with NCM | Application-directory WinMM selection is proven on this host; complete forwarding/backend identity and bootstrap trigger remain |
+| M5: package reversible DLL deployment | Pending | Exact-version checks, install/update/rollback, config, notices, and artifacts are reproducible without a resident injector | Packaging and recovery tests |
 | Package the MVP | Pending | A portable manifest contains only approved runtime artifacts and configuration | Clean release build and manifest inspection |
 
 ## Current evidence
@@ -47,4 +49,4 @@ The repository will provide a reproducible, non-invasive investigation path firs
 
 ## Next action
 
-The application-directory WinMM candidate is established only for the current host and pre-entry load boundary. Next, perform a static forwarding/deployment feasibility gate: enumerate the exact WinMM imports required by the root and early-loaded NCM modules, verify name/ordinal and calling-convention coverage against the x86 system DLL, and reject any design that requires an installed-directory mutation or allows an incomplete forwarder into normal execution. Do not implement a hook or injected routing path until that gate yields a reviewable deployment boundary consistent with the specification; do not reuse the falsified root flag, private NCM RVAs, fragile coordinate automation, system proxy, or certificate trust as a shortcut.
+Continue with the DLL target. Build a synthetic x86 WinMM-proxy fixture with complete 193-entry name/ordinal parity and a distinct verified backend; prove that it cannot self-forward and that bootstrap work begins only after loader lock. Do not run a proxy DLL inside NCM or modify the installed directory until the synthetic backend, full export surface, loader-lock handoff, and reversible deployment contract pass review. Do not substitute the falsified root flag, private NCM RVAs, fragile coordinate automation, system proxy, or certificate trust for the required DLL routing implementation.
