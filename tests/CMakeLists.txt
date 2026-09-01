@@ -40,3 +40,25 @@ add_test(
   NAME unm_sidecar_tests
   COMMAND unm_sidecar_tests $<TARGET_FILE:managed_process_test_child>
 )
+
+add_library(module_load_probe_fixture SHARED module_load_probe_fixture.cpp)
+target_link_libraries(module_load_probe_fixture PRIVATE ncm_project_options)
+
+add_executable(module_load_probe_fixture_target module_load_probe_fixture_target.cpp)
+target_link_libraries(
+  module_load_probe_fixture_target
+  PRIVATE module_load_probe_fixture ncm_project_options
+)
+
+add_executable(module_load_probe_tests module_load_probe_tests.cpp)
+target_link_libraries(
+  module_load_probe_tests
+  PRIVATE ncm_module_load_probe_lib ncm_project_options ole32
+)
+
+add_test(
+  NAME module_load_probe_tests
+  COMMAND module_load_probe_tests
+    $<TARGET_FILE:module_load_probe_fixture_target>
+    $<TARGET_FILE:module_load_probe_fixture>
+)

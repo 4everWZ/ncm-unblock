@@ -43,6 +43,14 @@ This supports the narrow hypothesis that current client network activity is brok
 - `msimg32.dll` and other loaders mentioned by reference projects are not imports of the root executable and are not candidates without evidence from another early-loaded module.
 - No hook library is justified by current evidence.
 
+### Pre-entry WinMM load experiment
+
+The dedicated Win32 investigation probe launched only isolated signed copies of the exact 2.9.7.199711 PE32 root under `DEBUG_ONLY_THIS_PROCESS`. It pinned the validated target and expected module without write/delete sharing, matched their volume/file IDs against the `CREATE_PROCESS` and `LOAD_DLL` event handles, assigned each root to a private kill-on-close Job before continuing the first debug event, and terminated the Job while the matching event was still stopped. Synthetic fixtures separately proved that neither the candidate DLL initializer nor the executable entry point ran on success, unexpected-identity failure, or bounded event-limit failure.
+
+On this host, the control copy without a local candidate loaded `C:\Windows\SysWOW64\winmm.dll` at debug event 20. The treatment copy placed the same validly signed x86 system WinMM beside the isolated executable and loaded that application-directory copy at debug event 20. Both exact process trees exited and the allowlisted temporary material was removed. No installed file, NCM user state, system proxy, or certificate state was changed.
+
+This is positive evidence that the current Windows build, x86 loader policy, and exact NCM root accept an application-directory WinMM before DLL initialization or application entry. It is not evidence that a custom forwarder is export-complete, that full NCM startup from an isolated directory is supported, that an installed-directory change is acceptable, or that a WinMM-loaded component can safely establish the required proxy routing. Those remain separate design and runtime gates.
+
 ## Client-local proxy checkpoint
 
 Read-only inspection found no CloudMusic proxy values under the current user's NetEase registry keys or in the readable server-provided JSON configuration files. Installed `cloudmusic.dll` strings associate `%LOCALAPPDATA%\Netease\CloudMusic\localdata` with `AppConfig::SaveConfigAsync` and `Config.Proxy` fields `Type`, `Host`, `Port`, `UserName`, and `Password`. The file uses an opaque private encoding and was not decoded or rewritten; direct byte editing is not a supported experiment path.
