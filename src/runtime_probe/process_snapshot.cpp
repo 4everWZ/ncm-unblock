@@ -118,7 +118,7 @@ struct module_snapshot {
   MODULEENTRY32W entry{};
   entry.dwSize = sizeof(entry);
   if (!Module32FirstW(snapshot.get(), &entry)) {
-    return {{}, GetLastError() == ERROR_NO_MORE_FILES};
+    return {};
   }
 
   module_snapshot result;
@@ -174,6 +174,10 @@ std::vector<process_info> find_processes(std::wstring_view executable_name) {
     info.network_modules_complete = modules.complete;
     processes.push_back(std::move(info));
   } while (Process32NextW(snapshot.get(), &entry));
+
+  if (GetLastError() != ERROR_NO_MORE_FILES) {
+    throw std::runtime_error("process enumeration ended before the snapshot was complete");
+  }
 
   std::ranges::sort(processes, {}, &process_info::process_id);
   return processes;
