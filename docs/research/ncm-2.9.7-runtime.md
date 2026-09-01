@@ -7,7 +7,7 @@ This report records reproducible investigation evidence. It is not the product c
 - **Target observed:** NetEase Cloud Music `2.9.7.199711` at `D:\Program Files (x86)\Netease\CloudMusic\cloudmusic.exe` on Windows.
 - **Snapshot date:** 2026-09-01.
 - **Methods:** The repository's Win32 `ncm_runtime_probe` and bounded loopback proxy observer, Visual Studio `dumpbin`, Windows Authenticode verification, process/module snapshots, process command lines, IPv4 TCP ownership inspection, local client-state inspection, and upstream primary sources.
-- **Non-invasive scope:** No target files, NCM proxy settings, certificates, or NCM processes were changed. Only synthetic requests were sent to the repository's rejecting loopback observer; no payload content or credentials were captured or forwarded.
+- **Controlled scope:** No installed target files, NCM proxy settings, system proxy values, or certificates were changed. Controlled NCM instances were launched and, after normal close only minimized to the tray, their recorded experiment processes were terminated under explicit authorization. Private `localdata` was snapshotted outside the repository and fully restored. No payload content or credentials were captured or forwarded.
 - **Not established:** Playback-request routing, HTTP/HTTPS proxy behavior, certificate requirements, UNM compatibility, stable loader behavior, or performance.
 
 ## Static image facts
@@ -54,7 +54,13 @@ The repository's `ncm_proxy_observer` provides the safe endpoint for the next co
 
 A controlled launch started the exact target from its installation directory with `--proxy-server=http://127.0.0.1:<ephemeral-port>`. The root process command line contained that exact argument, but the observer received zero requests during the 15-second startup window. In the same window, the root process established connections on ports 80 and 443 through other paths. This falsifies the narrow claim that the Chromium command-line flag provides NCM-wide startup routing; it does not prove that every CEF request ignores the flag or establish playback behavior.
 
-The normal main-window close request activated NCM's close-to-tray behavior rather than exiting the process. The harness did not force termination or overwrite live private state. The user-level Internet proxy remained exactly unchanged. A read-only comparison found `localdata` content, attributes, and owner/group/DACL unchanged, while creation/write timestamps differed after launch. A restricted temporary recovery bundle is retained until NCM exits through its tray menu; restoration and cleanup are therefore not yet claimed complete. No certificate state was changed.
+The normal main-window close request activated NCM's close-to-tray behavior rather than exiting the process. After explicit authorization, the recorded experiment root/process tree was terminated without targeting unrelated names or paths. The user-level Internet proxy remained exactly unchanged. `localdata` content, creation/write timestamps, attributes, and owner/group/DACL were restored against the private manifest and backup, then every recovery, observer, sibling, and displaced file was removed. No certificate state was changed.
+
+### Client UI automation checkpoint
+
+A public [2.9.7 procedure](https://jingyan.baidu.com/article/ac6a9a5e155c506a653eacbe.html) and a separate [restart-prompt procedure](https://jingyan.baidu.com/article/7908e85c70a95bee491ad270.html) corroborate the settings path `settings → tools → HTTP proxy → custom proxy`, including server/port fields and a restart prompt. The embedded settings controls were not exposed through Windows UI Automation. Attempts gated to the exact signed version, executable path, foreground window, and expected layout did not cause `localdata` to persist a proxy change; each run was therefore recovered without claiming that the client-local proxy was configured. Fragile coordinate automation is not a reproducible compatibility method and has been stopped.
+
+The experiment harness prints its private recovery directory before launching NCM and warns that a second interrupt must not interrupt recovery. If an external host termination leaves that directory behind, `tools/restore-ncm-proxy-experiment.ps1` validates the exact temporary-directory and bundle identity, private owner/DACL, non-reparse files, current-user target, bundle-owned sibling paths, backup length and SHA-256 integrity record, and stopped-process boundary before atomically restoring bytes, timestamps, attributes, and owner/group/DACL. A synthetic-profile recovery test passed; this validates recovery mechanics, not NCM routing.
 
 ## Upstream v0.28.0 checkpoint
 

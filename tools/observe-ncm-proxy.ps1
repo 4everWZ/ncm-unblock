@@ -5,11 +5,16 @@ param(
 
     [string]$ObserverPath = (Join-Path $PSScriptRoot '..\build\win32-release\src\proxy_observer\ncm_proxy_observer.exe'),
 
-    [ValidateRange(1, 60)]
+    [ValidateRange(1, 300)]
     [int]$ObservationSeconds = 15,
 
     [ValidateRange(1, 1000)]
-    [int]$MaxEvents = 50
+    [int]$MaxEvents = 50,
+
+    [switch]$ForceCloseAfterTimeout,
+
+    [ValidateSet('CommandLine', 'ClientUi')]
+    [string]$RouteMode = 'CommandLine'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -123,6 +128,97 @@ function Stop-OwnedObserver {
     }
 }
 
+function Stop-LaunchedNcmTree {
+    param([Diagnostics.Process]$Process)
+
+    if ($null -eq $Process) {
+        return $false
+    }
+    try {
+        if ($Process.HasExited) {
+            return (Wait-AllNcmExit -TimeoutSeconds 2)
+        }
+
+        $instances = @(Get-CimInstance Win32_Process)
+        $depthById = @{}
+        $depthById[[uint32]$Process.Id] = 0
+        $changed = $true
+        while ($changed) {
+            $changed = $false
+            foreach ($instance in $instances) {
+                $processId = [uint32]$instance.ProcessId
+                $parentId = [uint32]$instance.ParentProcessId
+                if (-not $depthById.ContainsKey($processId) -and $depthById.ContainsKey($parentId)) {
+                    $depthById[$processId] = $depthById[$parentId] + 1
+                    $changed = $true
+                }
+            }
+        }
+
+        $tree = @($instances | Where-Object { $depthById.ContainsKey([uint32]$_.ProcessId) })
+        $root = @($tree | Where-Object { [uint32]$_.ProcessId -eq [uint32]$Process.Id })
+        if ($root.Count -ne 1) {
+            return $false
+        }
+
+        $allowedPaths = @($script:ResolvedNcmPath, $script:TargetReporterPath)
+        foreach ($instance in $tree) {
+            if ([string]::IsNullOrWhiteSpace($instance.ExecutablePath)) {
+                return $false
+            }
+            $candidatePath = [IO.Path]::GetFullPath($instance.ExecutablePath)
+            if (@($allowedPaths | Where-Object { $_ -ieq $candidatePath }).Count -ne 1) {
+                return $false
+            }
+        }
+
+        $orderedTree = @($tree | Sort-Object `
+                @{ Expression = { if ([uint32]$_.ProcessId -eq [uint32]$Process.Id) { 0 } else { 1 } } }, `
+                @{ Expression = { -$depthById[[uint32]$_.ProcessId] } })
+        foreach ($instance in $orderedTree) {
+            $current = Get-CimInstance Win32_Process -Filter "ProcessId = $($instance.ProcessId)" -ErrorAction SilentlyContinue
+            if ($null -eq $current) {
+                continue
+            }
+            if ($current.CreationDate -ne $instance.CreationDate -or
+                [string]::IsNullOrWhiteSpace($current.ExecutablePath) -or
+                [IO.Path]::GetFullPath($current.ExecutablePath) -ine [IO.Path]::GetFullPath($instance.ExecutablePath)) {
+                return $false
+            }
+            [Diagnostics.Process]::GetProcessById([int]$instance.ProcessId).Kill()
+        }
+        return (Wait-AllNcmExit -TimeoutSeconds 10)
+    } catch {
+        return $false
+    }
+}
+
+function Request-NormalNcmExit {
+    param(
+        [Diagnostics.Process]$Process,
+        [int]$TimeoutSeconds
+    )
+
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        if (@(Get-AllNcmProcesses).Count -eq 0) {
+            return (Wait-AllNcmExit -TimeoutSeconds 1)
+        }
+        try {
+            if (-not $Process.HasExited) {
+                $Process.Refresh()
+                if ($Process.MainWindowHandle -ne 0) {
+                    [void]$Process.CloseMainWindow()
+                }
+            }
+        } catch {
+            # The owned root can exit while a normal close is being retried.
+        }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $false
+}
+
 function Test-TargetCommandLineArgument {
     param([string]$ExpectedArgument)
 
@@ -162,7 +258,8 @@ if (-not (Test-Path -LiteralPath $localDataPath -PathType Leaf)) {
 }
 
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
-$experimentPath = [IO.Path]::GetFullPath((Join-Path $tempRoot ('ncm-proxy-experiment-' + [Guid]::NewGuid().ToString('N'))))
+$experimentId = [Guid]::NewGuid().ToString('N')
+$experimentPath = [IO.Path]::GetFullPath((Join-Path $tempRoot ('ncm-proxy-experiment-' + $experimentId)))
 if (-not $experimentPath.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Temporary recovery path resolved outside the system temporary directory.'
 }
@@ -171,8 +268,8 @@ $backupPath = Join-Path $experimentPath 'localdata.backup'
 $manifestPath = Join-Path $experimentPath 'recovery.json'
 $observerOutputPath = Join-Path $experimentPath 'observer.stdout'
 $observerErrorPath = Join-Path $experimentPath 'observer.stderr'
-$restoreSiblingPath = Join-Path ([IO.Path]::GetDirectoryName($localDataPath)) ('localdata.codex-restore-' + [Guid]::NewGuid().ToString('N'))
-$displacedPath = Join-Path ([IO.Path]::GetDirectoryName($localDataPath)) ('localdata.codex-displaced-' + [Guid]::NewGuid().ToString('N'))
+$restoreSiblingPath = Join-Path ([IO.Path]::GetDirectoryName($localDataPath)) ('localdata.codex-restore-' + $experimentId)
+$displacedPath = Join-Path ([IO.Path]::GetDirectoryName($localDataPath)) ('localdata.codex-displaced-' + $experimentId)
 
 $observer = $null
 $launchedNcm = $null
@@ -223,9 +320,18 @@ try {
         throw 'Private recovery copy does not match localdata.'
     }
     $backupCreated = $true
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $backupSha256 = -join @($sha256.ComputeHash($originalBytes) | ForEach-Object { $_.ToString('x2') })
+    } finally {
+        $sha256.Dispose()
+    }
 
     [ordered]@{
+        SchemaVersion = 1
+        BundleId = $experimentId
         TargetPath = $localDataPath
+        BackupSha256 = $backupSha256
         Sddl = $originalAcl.Sddl
         CreationTimeUtc = $originalCreationTimeUtc.ToString('O')
         LastWriteTimeUtc = $originalLastWriteTimeUtc.ToString('O')
@@ -235,13 +341,16 @@ try {
         RestoreSiblingPath = $restoreSiblingPath
         DisplacedPath = $displacedPath
     } | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8
+    Write-Output "private-recovery-path=$experimentPath"
+    Write-Output 'interrupt-policy=allow the first interrupt to finish recovery; do not interrupt recovery again'
 
     if (-not (Wait-AllNcmExit -TimeoutSeconds 1)) {
         throw 'An NCM instance started after the private snapshot was created.'
     }
 
+    $observerIdleMilliseconds = (($ObservationSeconds + 30) * 1000).ToString()
     $observer = Start-Process -FilePath $resolvedObserverPath `
-        -ArgumentList @('--port', '0', '--max-events', $MaxEvents.ToString(), '--idle-timeout-ms', '60000') `
+        -ArgumentList @('--port', '0', '--max-events', $MaxEvents.ToString(), '--idle-timeout-ms', $observerIdleMilliseconds) `
         -RedirectStandardOutput $observerOutputPath `
         -RedirectStandardError $observerErrorPath `
         -WindowStyle Hidden `
@@ -266,23 +375,30 @@ try {
         throw 'The loopback observer did not become ready.'
     }
 
-    $proxyArgument = "--proxy-server=http://127.0.0.1:$observerPort"
-    $launchedNcm = Start-Process -FilePath $script:ResolvedNcmPath `
-        -ArgumentList $proxyArgument `
-        -WorkingDirectory ([IO.Path]::GetDirectoryName($script:ResolvedNcmPath)) `
-        -PassThru
+    $launchParameters = @{
+        FilePath = $script:ResolvedNcmPath
+        WorkingDirectory = [IO.Path]::GetDirectoryName($script:ResolvedNcmPath)
+        PassThru = $true
+    }
+    if ($RouteMode -eq 'CommandLine') {
+        $proxyArgument = "--proxy-server=http://127.0.0.1:$observerPort"
+        $launchParameters.ArgumentList = $proxyArgument
+    }
+    $launchedNcm = Start-Process @launchParameters
 
-    $startDeadline = [DateTime]::UtcNow.AddSeconds(10)
-    $argumentObserved = $false
-    do {
-        $argumentObserved = Test-TargetCommandLineArgument -ExpectedArgument $proxyArgument
-        if ($argumentObserved) {
-            break
+    if ($RouteMode -eq 'CommandLine') {
+        $startDeadline = [DateTime]::UtcNow.AddSeconds(10)
+        $argumentObserved = $false
+        do {
+            $argumentObserved = Test-TargetCommandLineArgument -ExpectedArgument $proxyArgument
+            if ($argumentObserved) {
+                break
+            }
+            Start-Sleep -Milliseconds 200
+        } while ([DateTime]::UtcNow -lt $startDeadline)
+        if (-not $argumentObserved) {
+            throw 'The target NCM process did not expose the requested process-local proxy argument.'
         }
-        Start-Sleep -Milliseconds 200
-    } while ([DateTime]::UtcNow -lt $startDeadline)
-    if (-not $argumentObserved) {
-        throw 'The target NCM process did not expose the requested process-local proxy argument.'
     }
 
     $observationDeadline = [DateTime]::UtcNow.AddSeconds($ObservationSeconds)
@@ -290,43 +406,37 @@ try {
         Start-Sleep -Milliseconds 250
     }
 
-    $closeRequested = $false
-    try {
-        if (-not $launchedNcm.HasExited -and $launchedNcm.MainWindowHandle -ne 0) {
-            $closeRequested = $launchedNcm.CloseMainWindow()
+    if (-not (Request-NormalNcmExit -Process $launchedNcm -TimeoutSeconds 20)) {
+        if (-not $ForceCloseAfterTimeout -or -not (Stop-LaunchedNcmTree -Process $launchedNcm)) {
+            throw 'The launched NCM tree remained active after the bounded normal-close period; no private-state overwrite was attempted.'
         }
-    } catch {
-        $closeRequested = $false
-    }
-    if (-not $closeRequested) {
-        throw 'No target NCM main window accepted a normal close request.'
-    }
-    if (-not (Wait-AllNcmExit -TimeoutSeconds 20)) {
-        throw 'An NCM instance remained active after the normal close request; no private-state overwrite was attempted.'
     }
 
     if (-not (Stop-OwnedObserver -Process $observer)) {
         throw 'The owned observer did not stop within five seconds.'
     }
-    $eventLines = if (Test-Path -LiteralPath $observerOutputPath) {
-        @(Get-Content -LiteralPath $observerOutputPath | Where-Object { $_ -like 'proxy-event *' })
-    } else {
-        @()
-    }
+    $eventLines = @(if (Test-Path -LiteralPath $observerOutputPath) {
+            Get-Content -LiteralPath $observerOutputPath | Where-Object { $_ -like 'proxy-event *' }
+        })
     $observerEventCount = $eventLines.Count
     $routingObserved = $observerEventCount -gt 0
     if (-not $routingObserved) {
-        throw 'NCM started with the proxy argument, but the observer received no request.'
+        $routeDescription = if ($RouteMode -eq 'CommandLine') {
+            'the process-local proxy argument'
+        } else {
+            'the client UI experiment window'
+        }
+        throw "NCM started for $routeDescription, but the observer received no request."
     }
 } catch {
     $primaryError = $_.Exception
 } finally {
     if ($null -ne $launchedNcm -and @(Get-AllNcmProcesses).Count -ne 0) {
         try {
-            if (-not $launchedNcm.HasExited -and $launchedNcm.MainWindowHandle -ne 0) {
-                [void]$launchedNcm.CloseMainWindow()
+            $closed = Request-NormalNcmExit -Process $launchedNcm -TimeoutSeconds 5
+            if (-not $closed -and $ForceCloseAfterTimeout) {
+                [void](Stop-LaunchedNcmTree -Process $launchedNcm)
             }
-            [void](Wait-AllNcmExit -TimeoutSeconds 5)
         } catch {
             if ($null -eq $primaryError) {
                 $primaryError = $_.Exception
@@ -434,7 +544,7 @@ try {
     }
 
     $proxyResult = if ($null -eq $systemProxyUnchanged) { 'unknown' } else { $systemProxyUnchanged.ToString().ToLowerInvariant() }
-    Write-Output 'experiment-process-path=command-line-proxy'
+    Write-Output "experiment-process-path=$($RouteMode.ToLowerInvariant())"
     Write-Output "observer-events=$observerEventCount"
     Write-Output "routing-observed=$($routingObserved.ToString().ToLowerInvariant())"
     Write-Output "localdata-restored=$($stateRestored.ToString().ToLowerInvariant())"
