@@ -21,8 +21,8 @@
 ### MVP launch behavior
 
 1. Resolve and validate the configured NCM 2.9.7 executable and UNM core.
-2. Reserve an available HTTP/HTTPS loopback port pair, honoring explicitly configured fixed ports only when both can be bound safely.
-3. Start the sidecar with explicit loopback binding and restricted proxy arguments. Readiness requires a live child, both listeners, and a successful local PAC response where supported; it is not provider or playback health.
+2. Acquire exclusive loopback leases for an available HTTP/HTTPS port pair, honoring explicitly configured fixed ports only when both can be bound safely. Because the unmodified sidecar cannot accept inherited listener sockets, this is a bounded handoff rather than an atomic socket transfer: keep both leases until the suspended sidecar is owned by its private job, then release them immediately before resume. In automatic mode, a handoff collision retries the whole pair-selection/start attempt within a fixed budget; a configured fixed pair fails without silently changing ports.
+3. Start the sidecar with explicit loopback binding and restricted proxy arguments. Readiness requires a live managed tree, both loopback listeners owned by processes in that private job, and a successful local PAC response where supported; it is not provider or playback health.
 4. Start or attach to NCM only according to behavior established by the compatibility investigation; do not silently change system-wide proxy or certificate state.
 5. Keep the sidecar alive while the launcher-owned NCM lifetime is active.
 6. Stop the sidecar and report actionable failure information when the managed lifetime ends.
@@ -50,7 +50,7 @@ The exact NCM proxy-setting mechanism, existing-instance behavior, multi-process
 | The target is the signed NCM 2.9.7.199711 x86 executable | Repeatable PE metadata inspection and Authenticode status recorded in the runtime report |
 | The NCM-to-local-UNM path supports normal and unavailable tracks, search, play, and track changes | Versioned compatibility matrix using a pinned UNM executable and documented NCM configuration |
 | A launcher-owned sidecar becomes ready before NCM routing begins | Focused integration test covering success, timeout, early exit, and port collision |
-| The sidecar is reclaimed after normal NCM exit, NCM startup failure, launcher termination, and sidecar failure | Process-lifecycle integration tests using Windows job/process APIs |
+| The sidecar is reclaimed after normal NCM exit, NCM startup failure, launcher termination, and sidecar failure | Process-lifecycle integration tests that distinguish root exit from private-job tree completion |
 | The launcher does not terminate unrelated existing processes or expose the proxy outside loopback | Negative integration tests and socket ownership/address inspection |
 | Normal operation leaves system proxy and certificate state unchanged unless a separately authorized trust workflow is active | Before/after state comparison and uninstall/recovery test |
 | Release contents are portable and omit separate Node development/runtime tooling and generated development data | Packaging manifest inspection |
@@ -59,6 +59,7 @@ The exact NCM proxy-setting mechanism, existing-instance behavior, multi-process
 ## Open decisions
 
 - Which NCM-supported proxy configuration is reliable for 2.9.7 HTTP and HTTPS traffic without system-wide changes?
+- What minimum Windows version is supported, including nested-job behavior when the launcher itself already runs inside a job?
 - Is upstream UNM v0.28.0 acceptable after resolving its expired bundled leaf certificate, third-party notices, artifact authenticity, and target-version compatibility?
 - If HTTPS interception is required, can it be implemented with an acceptable per-user certificate lifecycle, or must the routing design change?
 - How should the launcher behave when an NCM 2.9.7 instance already exists?
