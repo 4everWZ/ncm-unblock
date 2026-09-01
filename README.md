@@ -22,3 +22,12 @@ Inspect the local NCM executable without changing it:
 ./build/win32-debug/src/runtime_probe/ncm_runtime_probe.exe `
   'C:\Path\To\CloudMusic\cloudmusic.exe'
 ```
+
+Run the bounded loopback proxy observer for controlled experiments:
+
+```powershell
+./build/win32-debug/src/proxy_observer/ncm_proxy_observer.exe `
+  --port 0 --max-events 20 --idle-timeout-ms 30000
+```
+
+The observer binds exclusively to `127.0.0.1`, prints only classified request metadata, never logs raw hosts, paths, query strings, headers, or bodies, and rejects every request with HTTP 502. It is an investigation tool, not a forwarding proxy.

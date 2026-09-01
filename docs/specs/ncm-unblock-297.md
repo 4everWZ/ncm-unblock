@@ -12,27 +12,30 @@
 
 - Release-owned runtime code is native C++20. Node does not enter `cloudmusic.exe`.
 - The UNM core is an independently replaceable sidecar executable. A release does not ship a separate `node.exe`, Node package manager, `node_modules`, upstream source checkout, or development cache. An upstream standalone executable may contain its own implementation runtime.
+- Select a standalone sidecar for the Windows operating-system architecture, not for the x86 architecture of `cloudmusic.exe`. Unsupported OS architectures fail before launch.
 - The sidecar binds only to loopback. The launcher must not expose an unauthenticated general-purpose proxy on a LAN or public interface.
+- The selected sidecar must run in its restricted/strict mode. For a sidecar that redirects HTTPS `CONNECT`, the launcher manages distinct HTTP and HTTPS loopback ports.
 - The launcher owns each sidecar process it starts and must arrange bounded cleanup when NCM exits, startup fails, or the launcher terminates. It must not terminate an unrelated pre-existing NCM or UNM process.
 - Idle lifecycle handling is event-driven; polling loops are not part of the target design.
 
 ### MVP launch behavior
 
 1. Resolve and validate the configured NCM 2.9.7 executable and UNM core.
-2. Reserve an available loopback port, honoring an explicitly configured fixed port only when it can be bound safely.
-3. Start the sidecar with a restricted proxy configuration and wait for a bounded readiness check.
+2. Reserve an available HTTP/HTTPS loopback port pair, honoring explicitly configured fixed ports only when both can be bound safely.
+3. Start the sidecar with explicit loopback binding and restricted proxy arguments. Readiness requires a live child, both listeners, and a successful local PAC response where supported; it is not provider or playback health.
 4. Start or attach to NCM only according to behavior established by the compatibility investigation; do not silently change system-wide proxy or certificate state.
 5. Keep the sidecar alive while the launcher-owned NCM lifetime is active.
 6. Stop the sidecar and report actionable failure information when the managed lifetime ends.
 
-The exact NCM proxy-setting mechanism, readiness endpoint, sidecar arguments, existing-instance behavior, and multi-process exit condition remain investigation outputs and are not guessed by this specification.
+The exact NCM proxy-setting mechanism, existing-instance behavior, multi-process exit condition, and end-to-end health check remain investigation outputs and are not guessed by this specification.
 
 ### Configuration and packaging
 
 - Configuration is a human-readable file stored beside the launcher or in its portable data directory. Registry and database storage are excluded from the MVP.
 - Configuration must distinguish automatic port selection from an explicit fixed port. Source ordering and quality options are passed through only after they are verified against the pinned sidecar interface.
 - Downloaded binaries, user configuration, certificates, and runtime logs are not source-controlled.
-- Third-party redistribution requires recorded upstream identity, version, license, architecture, and redistribution terms before an artifact enters a release.
+- Third-party redistribution requires recorded upstream identity, version, license, architecture, runtime interface, corresponding-source path, required notices, and redistribution terms before an artifact enters a release.
+- Publicly shared upstream private keys or expired leaf certificates are not accepted as the product trust design. If HTTPS interception proves necessary, certificate generation, storage, narrowly scoped trust, renewal, removal, and failure recovery require a separate accepted design and explicit user authorization before trust-store mutation.
 
 ### Evolution gates
 
@@ -49,13 +52,15 @@ The exact NCM proxy-setting mechanism, readiness endpoint, sidecar arguments, ex
 | A launcher-owned sidecar becomes ready before NCM routing begins | Focused integration test covering success, timeout, early exit, and port collision |
 | The sidecar is reclaimed after normal NCM exit, NCM startup failure, launcher termination, and sidecar failure | Process-lifecycle integration tests using Windows job/process APIs |
 | The launcher does not terminate unrelated existing processes or expose the proxy outside loopback | Negative integration tests and socket ownership/address inspection |
+| Normal operation leaves system proxy and certificate state unchanged unless a separately authorized trust workflow is active | Before/after state comparison and uninstall/recovery test |
 | Release contents are portable and omit separate Node development/runtime tooling and generated development data | Packaging manifest inspection |
 | Performance claims use defined versions, sampling windows, and comparable scenarios | Baseline report for NCM alone, standalone UNM, and the launcher-managed path |
 
 ## Open decisions
 
 - Which NCM-supported proxy configuration is reliable for 2.9.7 HTTP and HTTPS traffic without system-wide changes?
-- Which upstream UNM release/build is redistributable and compatible, and what stable readiness signal does it expose?
+- Is upstream UNM v0.28.0 acceptable after resolving its expired bundled leaf certificate, third-party notices, artifact authenticity, and target-version compatibility?
+- If HTTPS interception is required, can it be implemented with an acceptable per-user certificate lifecycle, or must the routing design change?
 - How should the launcher behave when an NCM 2.9.7 instance already exists?
 - Which process set defines the end of an NCM session?
 - After the MVP, does measured evidence justify a DLL proxy, injection, selective routing, or no injected component at all?

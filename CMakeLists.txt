@@ -27,6 +27,7 @@ endif()
 include(CTest)
 
 add_subdirectory(src/runtime_probe)
+add_subdirectory(src/proxy_observer)
 
 if(BUILD_TESTING)
   add_subdirectory(tests)

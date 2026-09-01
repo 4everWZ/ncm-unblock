@@ -2,3 +2,8 @@ add_executable(runtime_probe_tests runtime_probe_tests.cpp)
 target_link_libraries(runtime_probe_tests PRIVATE ncm_runtime_probe_lib ncm_project_options)
 
 add_test(NAME runtime_probe_tests COMMAND runtime_probe_tests)
+
+add_executable(proxy_observation_tests proxy_observation_tests.cpp)
+target_link_libraries(proxy_observation_tests PRIVATE ncm_proxy_observation ncm_project_options)
+
+add_test(NAME proxy_observation_tests COMMAND proxy_observation_tests)

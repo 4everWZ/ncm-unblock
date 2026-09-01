@@ -6,8 +6,8 @@ This report records reproducible investigation evidence. It is not the product c
 
 - **Target observed:** NetEase Cloud Music `2.9.7.199711` at `D:\Program Files (x86)\Netease\CloudMusic\cloudmusic.exe` on Windows.
 - **Snapshot date:** 2026-09-01.
-- **Methods:** The repository's Win32 `ncm_runtime_probe`, Visual Studio `dumpbin`, Windows Authenticode verification, process/module snapshots, process command lines, and IPv4 TCP ownership inspection.
-- **Non-invasive scope:** No target files, proxy settings, certificates, processes, or network traffic were changed. No payload content or credentials were captured.
+- **Methods:** The repository's Win32 `ncm_runtime_probe` and bounded loopback proxy observer, Visual Studio `dumpbin`, Windows Authenticode verification, process/module snapshots, process command lines, IPv4 TCP ownership inspection, local client-state inspection, and upstream primary sources.
+- **Non-invasive scope:** No target files, NCM proxy settings, certificates, or NCM processes were changed. Only synthetic requests were sent to the repository's rejecting loopback observer; no payload content or credentials were captured or forwarded.
 - **Not established:** Playback-request routing, HTTP/HTTPS proxy behavior, certificate requirements, UNM compatibility, stable loader behavior, or performance.
 
 ## Static image facts
@@ -42,16 +42,30 @@ This supports the narrow hypothesis that current client network activity is brok
 - `msimg32.dll` and other loaders mentioned by reference projects are not imports of the root executable and are not candidates without evidence from another early-loaded module.
 - No hook library is justified by current evidence.
 
-## Upstream checkpoint
+## Client-local proxy checkpoint
 
-The official [UnblockNeteaseMusic/server releases](https://github.com/UnblockNeteaseMusic/server/releases) page listed v0.28.0 and standalone assets when checked. Its release notes discuss compatibility with newer NCM clients, but that does not prove behavior for this 2.9.7 installation. No upstream executable was downloaded, executed, or approved for redistribution during this investigation.
+Read-only inspection found no CloudMusic proxy values under the current user's NetEase registry keys or in the readable server-provided JSON configuration files. Installed `cloudmusic.dll` strings associate `%LOCALAPPDATA%\Netease\CloudMusic\localdata` with `AppConfig::SaveConfigAsync` and `Config.Proxy` fields `Type`, `Host`, `Port`, `UserName`, and `Password`. The file uses an opaque private encoding and was not decoded or rewritten; direct byte editing is not a supported experiment path.
+
+The running client had no explicit Chromium proxy command-line switch. Together with the client's `UseIE` and WinHTTP/WinINet integration strings and a currently enabled user-level Internet proxy (whose endpoint was intentionally not recorded), this strongly indicates that the observed session uses the IE/system-proxy mode. It does not prove the persisted `Type` value. A reversible A/B requires all NCM processes to exit normally, an out-of-repository private snapshot of `localdata` including its metadata/ACL, a proxy change through the NCM settings UI, a wait for asynchronous persistence, and restoration through the same UI. Snapshot replacement while NCM is stopped is recovery, not the normal write path. System proxy values remain unchanged in this experiment.
+
+The repository's `ncm_proxy_observer` provides the safe endpoint for the next controlled experiment. It binds exclusively to `127.0.0.1`, stops after a bounded event count or idle time, retains only method/target-form/scheme/destination-class/port/completeness, and returns 502 without forwarding. A synthetic socket check produced one absolute-form HTTP event and one HTTPS `CONNECT` event while test paths, query values, and authorization data remained absent from output. This validates the observer, not NCM behavior.
+
+## Upstream v0.28.0 checkpoint
+
+The official [v0.28.0 release](https://github.com/UnblockNeteaseMusic/server/releases/tag/v0.28.0) provides Windows x64 and ARM64 standalone executables, but no x86 executable. The sidecar therefore follows OS architecture rather than the x86 client architecture. Its official [build workflow](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/.github/workflows/build-binaries.yml) uses `pkg` Node 18 targets, so the standalone contains its runtime and does not require a separately installed Node toolchain.
+
+The official [CLI and startup code](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/src/app.js) uses separate HTTP/HTTPS ports, defaults to `8080:8081`, and does not make loopback binding the safe default. A launcher candidate must explicitly pass `-a 127.0.0.1`, an HTTP/HTTPS port pair, and `-s`. There is no dedicated health endpoint: a live child, both listening sockets, and the [HTTP `/proxy.pac` response](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/src/server.js) establish initialization only, not provider or playback health.
+
+HTTPS is currently blocked at the trust-design level. The upstream [CONNECT path](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/src/hook.js#L515-L533) redirects selected tunnels to its HTTPS listener. The bundled [server certificate](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/server.crt) expired on 2026-07-24, before this investigation, and its default private key is public. Although custom certificate paths are supported, the project has not accepted a CA/leaf generation, per-user trust, renewal, removal, or recovery design. No certificate was installed.
+
+The project declares `LGPL-3.0-only` in its [package metadata](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/package.json) and distributes [GPLv3](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/COPYING) and [LGPLv3](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/COPYING.LESSER) texts. Before redistribution, this repository still needs a corresponding-source route plus a license/notice audit for the embedded Node runtime and bundled dependencies. No upstream executable was downloaded, executed, or approved for redistribution in this checkpoint.
 
 ## Remaining M0 experiments
 
-1. Record the current NCM client-local proxy state and define an exact rollback without copying private values into the repository.
-2. Route a controlled, non-sensitive request through a loopback observer to distinguish whether 2.9.7 honors its HTTP proxy for HTTPS destinations and whether it uses CONNECT.
+1. Identify how 2.9.7 persists its client-local proxy state and prove an exact read/write/rollback cycle without copying private values into the repository.
+2. Route a controlled, non-sensitive request through the validated loopback observer to distinguish whether 2.9.7 honors its HTTP proxy for HTTPS destinations and whether it uses CONNECT.
 3. Repeat connection ownership snapshots around search, normal-track play, unavailable-track play, and track changes; use stack-specific tracing only if ownership remains ambiguous.
 4. Inspect loader candidates for search order and complete export forwarding in an isolated copy, not the installed client directory.
-5. Pin an upstream UNM Windows artifact only after verifying its source, version, license, architecture, CLI, readiness behavior, and redistribution terms.
+5. Pin an upstream UNM Windows artifact only after verifying authenticity, target compatibility, certificate lifecycle, corresponding source, and bundled dependency notices in addition to its already-audited source, version, architecture, CLI, and initialization behavior.
 
 The launcher compatibility go/no-go remains open until the NCM-to-loopback-UNM matrix covers search, normal tracks, unavailable tracks, play, and track changes.
