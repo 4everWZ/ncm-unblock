@@ -3,3 +3,5 @@ EXPORTS
   cef_execute_process
   cef_register_extension
   cef_fixture_registration_count
+  cef_fixture_handler_refct
+  cef_fixture_execute_count

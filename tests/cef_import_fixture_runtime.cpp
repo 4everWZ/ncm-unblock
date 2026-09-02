@@ -5,8 +5,12 @@
 #include <string_view>
 
 namespace {
+
 long g_registrations{};
-}
+long g_execute_calls{};
+ncm::cef::cef_v8handler_t* g_retained_handler{};
+
+}  // namespace
 
 extern "C" {
 
@@ -24,13 +28,39 @@ int __cdecl cef_register_extension(
     const ncm::cef::cef_string_t* name,
     const ncm::cef::cef_string_t* code,
     ncm::cef::cef_v8handler_t* handler) {
-  if (name == nullptr || code == nullptr || handler != nullptr ||
-      std::wstring_view(name->str, name->length) != L"ncm/unblock/m3" ||
-      std::wstring_view(code->str, code->length).find(L"__ncmUnblock297") ==
-          std::wstring_view::npos) {
+  // Mirror CEF 1916 DLL glue: Wrap always UnderlyingRelease()s a non-null
+  // handler before CefRegisterExtension accepts or rejects the registration.
+  if (handler != nullptr) {
+    handler->base.release(&handler->base);
+  }
+
+  const auto valid =
+      name != nullptr && code != nullptr && handler != nullptr &&
+      handler->execute != nullptr &&
+      std::wstring_view(name->str, name->length) == L"ncm/unblock/m3" &&
+      std::wstring_view(code->str, code->length).find(L"ncmUnblock297Marker") !=
+          std::wstring_view::npos &&
+      std::wstring_view(code->str, code->length).find(L"native function") !=
+          std::wstring_view::npos;
+
+  if (!valid) {
+    // Temporary RefPtr destruction after a rejected registration.
+    if (handler != nullptr) {
+      handler->base.release(&handler->base);
+    }
     return 0;
   }
+
+  // V8TrackObject retain stand-in for process lifetime.
+  handler->base.add_ref(&handler->base);
+  g_retained_handler = handler;
   InterlockedIncrement(&g_registrations);
+
+  // Exercise Execute without a real V8 context so ownership + marker paths
+  // are observable from the import-hook fixture.
+  ncm::cef::cef_v8value_t* retval = nullptr;
+  handler->execute(handler, nullptr, nullptr, 0, nullptr, &retval, nullptr);
+  InterlockedIncrement(&g_execute_calls);
   return 1;
 }
 
@@ -51,6 +81,18 @@ int __cdecl cef_execute_process(
 
 long __cdecl cef_fixture_registration_count() {
   return InterlockedCompareExchange(&g_registrations, 0, 0);
+}
+
+long __cdecl cef_fixture_handler_refct() {
+  if (g_retained_handler == nullptr ||
+      g_retained_handler->base.get_refct == nullptr) {
+    return 0;
+  }
+  return g_retained_handler->base.get_refct(&g_retained_handler->base);
+}
+
+long __cdecl cef_fixture_execute_count() {
+  return InterlockedCompareExchange(&g_execute_calls, 0, 0);
 }
 
 }  // extern "C"

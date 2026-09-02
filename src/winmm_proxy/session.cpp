@@ -55,8 +55,9 @@ void write_injection_report(cef_injection::import_hook_result hook) noexcept {
   if (file == INVALID_HANDLE_VALUE) return;
   char line[256]{};
   const int written = sprintf_s(
-      line, "pid=%lu hook=%s registration=%s\n", GetCurrentProcessId(),
-      cef_injection::describe(hook), registration_name());
+      line, "pid=%lu hook=%s registration=%s marker=%ld\n",
+      GetCurrentProcessId(), cef_injection::describe(hook), registration_name(),
+      cef_injection::current_marker_count());
   if (written > 0) {
     DWORD ignored{};
     WriteFile(file, line, static_cast<DWORD>(written), &ignored, nullptr);
@@ -74,6 +75,12 @@ void observe_injection(cef_injection::import_hook_result hook) noexcept {
   const auto deadline = GetTickCount64() + 60000;
   while (cef_injection::current_registration_state() ==
              cef_injection::registration_state::not_attempted &&
+         GetTickCount64() < deadline) {
+    Sleep(100);
+  }
+  // Registration success alone is not marker clearance. Keep polling until a
+  // native Execute is observed or the same deadline expires.
+  while (cef_injection::current_marker_count() <= 0 &&
          GetTickCount64() < deadline) {
     Sleep(100);
   }

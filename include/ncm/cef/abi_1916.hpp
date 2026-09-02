@@ -13,6 +13,7 @@
 //   include/capi/cef_app_capi.h          cef_app_t
 //   include/capi/cef_render_process_handler_capi.h
 //                                        cef_render_process_handler_t
+//   include/capi/cef_v8_capi.h           cef_v8handler_t
 //
 // CEF is Copyright (c) 2014 Marshall A. Greenblatt and is distributed under a
 // three-clause BSD licence. These declarations are an interface description, so
@@ -23,7 +24,7 @@
 // -------------------------------------------
 // The transitive include closure of `cef_app_capi.h` is most of the upstream
 // `include/` tree, so there is no meaningful subset to vendor; it would be all
-// or nothing. This project touches exactly four concrete structures and passes
+// or nothing. This project touches exactly five concrete structures and passes
 // every other CEF object through as an opaque pointer it never dereferences.
 // Declaring only what is dereferenced keeps the third-party surface to what the
 // code actually depends on.
@@ -80,7 +81,7 @@ struct cef_v8exception_t;
 struct cef_v8stack_trace_t;
 struct cef_domnode_t;
 struct cef_process_message_t;
-struct cef_v8handler_t;
+struct cef_v8value_t;
 
 struct cef_string_utf16_t {
   cef_char16* str;
@@ -154,6 +155,16 @@ struct cef_render_process_handler_t {
       cef_process_message_t* message);
 };
 
+// Native extension handler. `execute` arguments stay opaque; only the callback
+// slot itself is dereferenced by this project.
+struct cef_v8handler_t {
+  cef_base_t base;
+  int(NCM_CEF_CALLBACK* execute)(
+      cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object,
+      std::size_t argumentsCount, cef_v8value_t* const* arguments,
+      cef_v8value_t** retval, cef_string_t* exception);
+};
+
 // Layout guards for the Win32 target. A transcription slip that drops or adds a
 // member changes the size, and CEF itself rejects a structure whose `size`
 // field does not match what it expects, so these are the first line of defence
@@ -165,6 +176,8 @@ static_assert(sizeof(cef_app_t) == sizeof(cef_base_t) + 5 * sizeof(void*),
               "cef_app_t carries five members on branch 1916");
 static_assert(sizeof(cef_render_process_handler_t) == sizeof(cef_base_t) + 11 * sizeof(void*),
               "cef_render_process_handler_t carries eleven members on branch 1916");
+static_assert(sizeof(cef_v8handler_t) == sizeof(cef_base_t) + sizeof(void*),
+              "cef_v8handler_t carries one execute member on branch 1916");
 
 // Whether a module's reported hashes are the pair these layouts belong to.
 [[nodiscard]] inline bool matches_pinned_api(

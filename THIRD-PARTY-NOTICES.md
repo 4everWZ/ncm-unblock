@@ -10,14 +10,14 @@ with redistribution terms resolved before it enters a release.
 |---|---|
 | Upstream | `https://bitbucket.org/chromiumembedded/cef`, GitHub mirror `chromiumembedded/cef` |
 | Branch | `1916` |
-| Files consulted | `include/internal/cef_export.h`, `include/internal/cef_types.h`, `include/internal/cef_string_types.h`, `include/capi/cef_base_capi.h`, `include/capi/cef_app_capi.h`, `include/capi/cef_render_process_handler_capi.h` |
+| Files consulted | `include/internal/cef_export.h`, `include/internal/cef_types.h`, `include/internal/cef_string_types.h`, `include/capi/cef_base_capi.h`, `include/capi/cef_app_capi.h`, `include/capi/cef_render_process_handler_capi.h`, `include/capi/cef_v8_capi.h` |
 | Licence | Three-clause BSD |
 | Copyright | Copyright (c) 2014 Marshall A. Greenblatt |
 | Used in | [include/ncm/cef/abi_1916.hpp](include/ncm/cef/abi_1916.hpp) |
 | Redistributed | No binary, source tree, or header file from CEF is redistributed |
 
 [include/ncm/cef/abi_1916.hpp](include/ncm/cef/abi_1916.hpp) transcribes the
-structure layouts and calling convention of four CEF types so this project can
+structure layouts and calling convention of five CEF types so this project can
 interoperate with the browser runtime the target client already ships. No CEF
 source file is copied into the repository and no CEF binary is redistributed;
 the client supplies its own `libcef.dll`.

@@ -48,6 +48,7 @@ long g_sequence{};
 long g_original_webkit_sequence{};
 long g_registration_sequence{};
 int g_registration_calls{};
+cef::cef_v8handler_t* g_retained_handler{};
 
 template <typename T>
 [[nodiscard]] T* owner(cef::cef_base_t* self) {
@@ -178,19 +179,38 @@ int __cdecl register_extension(
     cef::cef_v8handler_t* handler) {
   g_registration_calls++;
   g_registration_sequence = InterlockedIncrement(&g_sequence);
-  require(handler == nullptr, "M3 registration supplied a native handler");
+  require(handler != nullptr && handler->execute != nullptr,
+          "M3 registration omitted the native handler");
+  require(handler->base.release != nullptr && handler->base.add_ref != nullptr &&
+              handler->base.get_refct != nullptr,
+          "M3 registration supplied an incomplete handler base");
+  // Mimic CefV8HandlerCToCpp::Wrap UnderlyingRelease.
+  handler->base.release(&handler->base);
   require(std::wstring_view(name->str, name->length) == L"ncm/unblock/m3",
           "M3 registration used the wrong extension name");
   const std::wstring_view source(code->str, code->length);
-  require(source.find(L"__ncmUnblock297") != std::wstring_view::npos &&
-              source.find(L"m3 = true") != std::wstring_view::npos,
-          "M3 registration did not publish its observable marker");
+  require(source.find(L"native function") != std::wstring_view::npos &&
+              source.find(L"ncmUnblock297Marker") != std::wstring_view::npos,
+          "M3 registration did not publish its native marker");
+  // V8TrackObject retain stand-in.
+  handler->base.add_ref(&handler->base);
+  g_retained_handler = handler;
+  cef::cef_v8value_t* retval = nullptr;
+  require(handler->execute(handler, nullptr, nullptr, 0, nullptr, &retval,
+                           nullptr) == 1,
+          "the native marker handler did not report a handled execute");
   return 1;
 }
 
 int __cdecl reject_extension(
-    const cef::cef_string_t*, const cef::cef_string_t*, cef::cef_v8handler_t*) {
+    const cef::cef_string_t*, const cef::cef_string_t*,
+    cef::cef_v8handler_t* handler) {
   g_registration_calls++;
+  require(handler != nullptr && handler->base.release != nullptr,
+          "registration failure received no transferable handler");
+  // Wrap still consumes the transfer, then the temporary RefPtr destroys it.
+  handler->base.release(&handler->base);
+  handler->base.release(&handler->base);
   return 0;
 }
 
@@ -294,6 +314,11 @@ void test_forwards_and_registers_once() {
   require(cef_injection::current_registration_state() ==
               cef_injection::registration_state::succeeded,
           "successful registration was not observable");
+  require(g_retained_handler != nullptr &&
+              g_retained_handler->base.get_refct(&g_retained_handler->base) >= 1,
+          "successful registration destroyed the native handler");
+  require(cef_injection::current_marker_count() > 0,
+          "successful registration did not observe a native execute marker");
 
   require(wrapped_render->base.get_refct(&wrapped_render->base) == 1,
           "the render wrapper started with the wrong reference count");

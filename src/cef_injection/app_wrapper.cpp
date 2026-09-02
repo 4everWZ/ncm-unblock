@@ -10,13 +10,21 @@ namespace {
 
 struct app_wrapper;
 struct render_wrapper;
+struct v8_handler_wrapper;
 
 long g_registration_state{static_cast<long>(registration_state::not_attempted)};
+long g_marker_count{};
 
 constexpr wchar_t extension_name_text[] = L"ncm/unblock/m3";
+// `native function` is scoped to the surrounding function; the IIFE both
+// declares and invokes it when the extension is applied to a V8 context.
 constexpr wchar_t extension_code_text[] =
-    L"if (!this.__ncmUnblock297) this.__ncmUnblock297 = {};"
-    L"this.__ncmUnblock297.m3 = true;";
+    L"(function(){"
+    L"native function ncmUnblock297Marker();"
+    L"ncmUnblock297Marker();"
+    L"})();";
+
+using create_null_fn = cef::cef_v8value_t*(__cdecl*)();
 
 [[nodiscard]] cef::cef_string_t static_string(
     const wchar_t* value, std::size_t length) noexcept {
@@ -38,8 +46,14 @@ struct render_wrapper {
   register_extension_fn register_extension{};
 };
 
+struct v8_handler_wrapper {
+  cef::cef_v8handler_t value{};
+  long references{1};
+};
+
 static_assert(offsetof(app_wrapper, value) == 0);
 static_assert(offsetof(render_wrapper, value) == 0);
+static_assert(offsetof(v8_handler_wrapper, value) == 0);
 
 [[nodiscard]] app_wrapper* app_from(cef::cef_base_t* base) noexcept {
   return reinterpret_cast<app_wrapper*>(base);
@@ -56,6 +70,15 @@ static_assert(offsetof(render_wrapper, value) == 0);
 [[nodiscard]] render_wrapper* render_from(
     cef::cef_render_process_handler_t* value) noexcept {
   return reinterpret_cast<render_wrapper*>(value);
+}
+
+[[nodiscard]] v8_handler_wrapper* handler_from(cef::cef_base_t* base) noexcept {
+  return reinterpret_cast<v8_handler_wrapper*>(base);
+}
+
+[[nodiscard]] v8_handler_wrapper* handler_from(
+    cef::cef_v8handler_t* value) noexcept {
+  return reinterpret_cast<v8_handler_wrapper*>(value);
 }
 
 int NCM_CEF_CALLBACK app_add_ref(cef::cef_base_t* self) {
@@ -130,6 +153,61 @@ int NCM_CEF_CALLBACK render_get_refct(cef::cef_base_t* self) {
       InterlockedCompareExchange(&render_from(self)->references, 0, 0));
 }
 
+int NCM_CEF_CALLBACK handler_add_ref(cef::cef_base_t* self) {
+  return static_cast<int>(InterlockedIncrement(&handler_from(self)->references));
+}
+
+int NCM_CEF_CALLBACK handler_release(cef::cef_base_t* self) {
+  auto* wrapper = handler_from(self);
+  if (InterlockedDecrement(&wrapper->references) != 0) {
+    return 0;
+  }
+  delete wrapper;
+  return 1;
+}
+
+int NCM_CEF_CALLBACK handler_get_refct(cef::cef_base_t* self) {
+  return static_cast<int>(
+      InterlockedCompareExchange(&handler_from(self)->references, 0, 0));
+}
+
+[[nodiscard]] cef::cef_v8value_t* try_create_null_value() noexcept {
+  const HMODULE runtime = GetModuleHandleW(L"libcef.dll");
+  if (runtime == nullptr) {
+    return nullptr;
+  }
+  const auto create_null = reinterpret_cast<create_null_fn>(
+      GetProcAddress(runtime, "cef_v8value_create_null"));
+  return create_null == nullptr ? nullptr : create_null();
+}
+
+int NCM_CEF_CALLBACK handler_execute(
+    cef::cef_v8handler_t* self, const cef::cef_string_t*,
+    cef::cef_v8value_t*, std::size_t, cef::cef_v8value_t* const*,
+    cef::cef_v8value_t** retval, cef::cef_string_t*) {
+  (void)self;
+  InterlockedIncrement(&g_marker_count);
+  if (retval != nullptr) {
+    *retval = try_create_null_value();
+  }
+  return 1;
+}
+
+[[nodiscard]] cef::cef_v8handler_t* create_marker_handler() noexcept {
+  auto* wrapper = new (std::nothrow) v8_handler_wrapper{};
+  if (wrapper == nullptr) {
+    return nullptr;
+  }
+  wrapper->value.base = {
+      sizeof(cef::cef_v8handler_t),
+      &handler_add_ref,
+      &handler_release,
+      &handler_get_refct,
+  };
+  wrapper->value.execute = &handler_execute;
+  return &wrapper->value;
+}
+
 void NCM_CEF_CALLBACK render_thread_created(
     cef::cef_render_process_handler_t* self, cef::cef_list_value_t* extra_info) {
   auto* original = render_from(self)->original;
@@ -153,9 +231,19 @@ void NCM_CEF_CALLBACK render_webkit_initialized(
     return;
   }
 
+  auto* handler = create_marker_handler();
+  if (handler == nullptr) {
+    InterlockedExchange(
+        &g_registration_state, static_cast<long>(registration_state::failed));
+    return;
+  }
+
+  // CEF 1916 Wrap consumes one underlying reference. Start at 1, add the
+  // transfer ref, then never release after register_extension returns.
+  handler->base.add_ref(&handler->base);
   const auto name = static_string(extension_name_text, std::size(extension_name_text) - 1);
   const auto code = static_string(extension_code_text, std::size(extension_code_text) - 1);
-  const auto succeeded = wrapper->register_extension(&name, &code, nullptr) != 0;
+  const auto succeeded = wrapper->register_extension(&name, &code, handler) != 0;
   InterlockedExchange(
       &g_registration_state,
       static_cast<long>(succeeded ? registration_state::succeeded
@@ -323,6 +411,10 @@ wrapped_application wrap_application(
 registration_state current_registration_state() noexcept {
   return static_cast<registration_state>(
       InterlockedCompareExchange(&g_registration_state, 0, 0));
+}
+
+long current_marker_count() noexcept {
+  return InterlockedCompareExchange(&g_marker_count, 0, 0);
 }
 
 }  // namespace ncm::cef_injection

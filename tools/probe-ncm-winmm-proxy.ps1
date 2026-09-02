@@ -124,6 +124,7 @@ try {
     $observedBackend = $false
     $observedWindow = $false
     $observedRegistration = $false
+    $observedMarker = $false
     $snapshot = $null
     do {
         Start-Sleep -Milliseconds 500
@@ -140,13 +141,20 @@ try {
             # The root can exit while its window state is being read.
         }
         if ($injectionEnabled) {
-            $observedRegistration = @(Get-ChildItem -LiteralPath $injectionRoot `
-                    -Filter 'injection-*.txt' -File -ErrorAction SilentlyContinue |
+            $reports = @(Get-ChildItem -LiteralPath $injectionRoot `
+                    -Filter 'injection-*.txt' -File -ErrorAction SilentlyContinue)
+            $observedRegistration = @($reports |
                 Select-String -SimpleMatch 'registration=succeeded').Count -ne 0
+            $observedMarker = @($reports | ForEach-Object {
+                    if ((Get-Content -LiteralPath $_.FullName -Raw) -match 'marker=(\d+)' -and
+                        [int]$Matches[1] -gt 0) {
+                        $_
+                    }
+                }).Count -ne 0
         }
     } while ([DateTime]::UtcNow -lt $deadline -and
              ($censusEnabled -or
-              ($injectionEnabled -and -not $observedRegistration) -or
+              ($injectionEnabled -and (-not $observedRegistration -or -not $observedMarker)) -or
               -not ($observedProxy -and $observedBackend -and $observedWindow)))
 
     $exited = $launched.HasExited
@@ -202,6 +210,7 @@ try {
             Write-Output "  $($report.Name): $classification"
         }
         Write-Output "extension-registration-observed: $observedRegistration"
+        Write-Output "native-marker-observed: $observedMarker"
     }
 
     if (-not $launched.HasExited) {

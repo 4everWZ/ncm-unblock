@@ -32,4 +32,15 @@ enum class registration_state {
 // `on_web_kit_initialized`, after the client's original callback returns.
 [[nodiscard]] registration_state current_registration_state() noexcept;
 
+// Number of times the registered native extension handler's `execute` ran.
+// Registration success alone does not increment this.
+[[nodiscard]] long current_marker_count() noexcept;
+
+// Ownership for a non-null handler passed to `register_extension_fn` follows
+// CEF 1916 `CefV8HandlerCToCpp::Wrap`: construct with one reference, add one
+// extra reference before the call, then never release after the call. Wrap
+// always consumes the transfer with one `UnderlyingRelease`. On success CEF
+// retains the remaining reference for process lifetime; on failure its
+// temporary RefPtr releases the last reference and destroys the handler.
+
 }  // namespace ncm::cef_injection
