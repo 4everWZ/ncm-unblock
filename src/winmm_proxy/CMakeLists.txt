@@ -37,9 +37,13 @@ target_include_directories(ncm_winmm_export_table PUBLIC "${PROJECT_SOURCE_DIR}/
 add_library(ncm_winmm_forwarder STATIC forwarder_core.cpp)
 target_link_libraries(ncm_winmm_forwarder PUBLIC ncm_winmm_export_table ncm_project_options)
 
-# The bootstrap body this proxy hands to the deferred start.
+# The bootstrap body this proxy hands to the deferred start. Sidecar ownership
+# stays in the launcher module; this target only starts and holds it.
 add_library(ncm_winmm_session STATIC session.cpp)
-target_link_libraries(ncm_winmm_session PUBLIC ncm_winmm_forwarder ncm_config ncm_project_options)
+target_link_libraries(
+  ncm_winmm_session
+  PUBLIC ncm_winmm_forwarder ncm_config ncm_launcher_unm_sidecar ncm_project_options
+)
 
 # Entry point shared with the parity fixture so both DLLs bootstrap identically.
 add_library(ncm_winmm_dll_main INTERFACE)

@@ -1,17 +1,24 @@
 #include "ncm/winmm_proxy/session.hpp"
 
+#include "ncm/launcher/unm_sidecar.hpp"
 #include "ncm/winmm_proxy/forwarder.hpp"
 
 #include <Windows.h>
 
 #include <cstdio>
 #include <filesystem>
+#include <utility>
 
 namespace ncm::winmm_proxy {
 namespace {
 
 long g_result{static_cast<long>(session_result::pending)};
 config::settings g_settings{};
+// Heap-owned for the rest of the process and never deleted. Destroying it from
+// CRT teardown would run `TerminateJobObject` under `DllMain` on DLL unload.
+// Closing the process handle table still closes the kill-on-close job, which
+// reclaims the sidecar tree on normal NCM exit and abrupt owner termination.
+launcher::unm_sidecar* g_sidecar{};
 
 void publish(session_result result) noexcept {
   InterlockedExchange(&g_result, static_cast<long>(result));
@@ -52,6 +59,37 @@ void report_configuration_error(const config::load_result& loaded) noexcept {
   }
 }
 
+// Maps the applied settings onto the existing sidecar coordinator. Failure
+// keeps forwarding and installs no routing; it must not escape into the host.
+void start_sidecar() noexcept {
+  try {
+    launcher::unm_sidecar_options options;
+    options.executable = g_settings.sidecar_executable;
+    options.working_directory = g_settings.sidecar_executable.parent_path();
+    options.fixed_http_port = g_settings.http_port;
+    options.fixed_https_port = g_settings.https_port;
+    options.maximum_automatic_attempts = g_settings.automatic_attempts;
+    options.readiness_timeout = g_settings.readiness_timeout;
+
+    auto launched = launcher::unm_sidecar::launch(options);
+    g_sidecar = new launcher::unm_sidecar(std::move(launched));
+
+    wchar_t line[128]{};
+    if (swprintf_s(
+            line, L"sidecar ready pid=%lu http=%u https=%u",
+            static_cast<unsigned long>(g_sidecar->process().process_id()),
+            static_cast<unsigned>(g_sidecar->http_port()),
+            static_cast<unsigned>(g_sidecar->https_port())) > 0) {
+      report(line);
+    }
+    publish(session_result::sidecar_ready);
+  } catch (...) {
+    report(L"the sidecar did not become ready; forwarding continues but no"
+           L" routing is installed");
+    publish(session_result::sidecar_failed);
+  }
+}
+
 // Reads the package configuration once the surface is verified. An absent file
 // means "run with this build's defaults"; a present but unusable file means the
 // user stated an intent this build cannot honor, so the feature is declined
@@ -86,7 +124,7 @@ void apply_configuration() noexcept {
       return;
     }
 
-    publish(session_result::configured);
+    start_sidecar();
   } catch (...) {
     // Configuration handling allocates, and a bootstrap failure must never
     // become a host failure.
@@ -104,6 +142,20 @@ session_result current_session_result() noexcept {
 
 const config::settings& session_settings() noexcept {
   return g_settings;
+}
+
+unsigned long session_sidecar_process_id() noexcept {
+  return g_sidecar == nullptr
+      ? 0
+      : static_cast<unsigned long>(g_sidecar->process().process_id());
+}
+
+unsigned short session_sidecar_http_port() noexcept {
+  return g_sidecar == nullptr ? 0 : g_sidecar->http_port();
+}
+
+unsigned short session_sidecar_https_port() noexcept {
+  return g_sidecar == nullptr ? 0 : g_sidecar->https_port();
 }
 
 void prepare_session() noexcept {

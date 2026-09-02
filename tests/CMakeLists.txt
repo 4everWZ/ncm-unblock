@@ -136,3 +136,29 @@ add_executable(config_settings_tests config_settings_tests.cpp)
 target_link_libraries(config_settings_tests PRIVATE ncm_config ncm_project_options ole32)
 
 add_test(NAME config_settings_tests COMMAND config_settings_tests)
+
+# Hosts the real bootstrap body. The generated thunks carry the resolver the
+# forwarder calls; the executable does not export them, so this stays a host for
+# the session rather than a second proxy.
+add_executable(winmm_session_probe
+  winmm_session_probe.cpp
+  winmm_fixture_backend_path.cpp
+  "${NCM_WINMM_GENERATED_DIR}/winmm_proxy_thunks.cpp"
+)
+target_link_libraries(winmm_session_probe PRIVATE ncm_winmm_session ncm_project_options)
+target_include_directories(winmm_session_probe PRIVATE "${NCM_WINMM_GENERATED_DIR}")
+
+add_executable(winmm_session_tests winmm_session_tests.cpp)
+target_link_libraries(winmm_session_tests PRIVATE ncm_project_options)
+add_dependencies(
+  winmm_session_tests
+  winmm_session_probe winmm_backend_fixture managed_process_test_child
+)
+
+add_test(
+  NAME winmm_session_tests
+  COMMAND winmm_session_tests
+    $<TARGET_FILE:winmm_session_probe>
+    $<TARGET_FILE:winmm_backend_fixture>
+    $<TARGET_FILE:managed_process_test_child>
+)

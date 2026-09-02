@@ -10,13 +10,16 @@
 #include <thread>
 
 int wmain(int argument_count, wchar_t** arguments) {
-  if ((argument_count == 7 &&
+  const auto production_sidecar =
+      argument_count == 6 && std::wstring_view(arguments[1]) == L"-a";
+  if (production_sidecar ||
+      (argument_count == 7 &&
        (std::wstring_view(arguments[1]) == L"--unm-sidecar" ||
         std::wstring_view(arguments[1]) == L"--unm-empty-pac" ||
         std::wstring_view(arguments[1]) == L"--unm-short-pac" ||
         std::wstring_view(arguments[1]) == L"--unm-slow-pac")) ||
       (argument_count == 8 && std::wstring_view(arguments[1]) == L"--unm-fail-once")) {
-    int first_enforced = 2;
+    int first_enforced = production_sidecar ? 1 : 2;
     if (std::wstring_view(arguments[1]) == L"--unm-fail-once") {
       first_enforced = 3;
       const auto marker = CreateFileW(
@@ -109,7 +112,12 @@ int wmain(int argument_count, wchar_t** arguments) {
         closesocket(client);
       }
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    // A production-shaped launch has no test-mode prefix and must stay up for
+    // the owning session, the same way a real sidecar does. Prefixed modes keep
+    // the short lifetime the coordinator tests wait on.
+    std::this_thread::sleep_for(
+        production_sidecar && ready ? std::chrono::seconds(30)
+                                    : std::chrono::milliseconds(250));
     for (const auto listener : listeners) {
       if (listener != INVALID_SOCKET) {
         closesocket(listener);
