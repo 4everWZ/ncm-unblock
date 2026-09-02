@@ -198,3 +198,10 @@ add_test(
     $<TARGET_FILE:cef_probe_fixture_stdcall>
     $<TARGET_FILE:cef_probe_fixture_incomplete>
 )
+
+add_executable(cef_app_wrapper_tests cef_app_wrapper_tests.cpp)
+target_link_libraries(
+  cef_app_wrapper_tests PRIVATE ncm_cef_injection ncm_project_options)
+
+add_test(NAME cef_app_wrapper_success_tests COMMAND cef_app_wrapper_tests success)
+add_test(NAME cef_app_wrapper_failure_tests COMMAND cef_app_wrapper_tests failure)
