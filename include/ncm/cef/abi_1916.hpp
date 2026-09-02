@@ -66,6 +66,7 @@ using cef_char16 = wchar_t;
 // incomplete is deliberate: an accidental member access becomes a compile
 // error instead of a layout assumption.
 struct cef_command_line_t;
+struct cef_main_args_t;
 struct cef_scheme_registrar_t;
 struct cef_resource_bundle_handler_t;
 struct cef_browser_process_handler_t;

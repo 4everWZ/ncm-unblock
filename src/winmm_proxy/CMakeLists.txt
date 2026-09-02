@@ -43,7 +43,7 @@ target_link_libraries(ncm_winmm_forwarder PUBLIC ncm_winmm_export_table ncm_proj
 add_library(ncm_winmm_session STATIC session.cpp)
 target_link_libraries(
   ncm_winmm_session
-  PUBLIC ncm_winmm_forwarder ncm_config ncm_project_options
+  PUBLIC ncm_winmm_forwarder ncm_config ncm_cef_injection ncm_project_options
 )
 
 # Entry point shared with the parity fixture so both DLLs bootstrap identically.

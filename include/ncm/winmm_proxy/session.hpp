@@ -25,6 +25,11 @@ enum class session_result {
   // The host surface and configuration permit the primary in-process path.
   // M3 installs injection after reaching this state.
   injection_pending,
+  // The ordinary CEF process entry import is wrapped for this process.
+  injection_installed,
+  // The exact import boundary was absent, incompatible, or could not be
+  // changed. Forwarding continues and no partial injection remains.
+  injection_failed,
 };
 
 // Bootstrap body. Resolves the backend off the loader lock and verifies that

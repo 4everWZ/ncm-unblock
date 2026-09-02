@@ -205,3 +205,62 @@ target_link_libraries(
 
 add_test(NAME cef_app_wrapper_success_tests COMMAND cef_app_wrapper_tests success)
 add_test(NAME cef_app_wrapper_failure_tests COMMAND cef_app_wrapper_tests failure)
+
+add_library(cef_import_fixture_runtime SHARED
+  cef_import_fixture_runtime.cpp cef_import_fixture_runtime.def)
+target_link_libraries(cef_import_fixture_runtime PRIVATE ncm_project_options)
+target_include_directories(
+  cef_import_fixture_runtime PRIVATE "${PROJECT_SOURCE_DIR}/include")
+set_target_properties(cef_import_fixture_runtime PROPERTIES
+  OUTPUT_NAME "libcef"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_runtime"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_runtime"
+  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_runtime"
+)
+
+add_library(cef_import_fixture_runtime_mismatch SHARED
+  cef_import_fixture_runtime.cpp cef_import_fixture_runtime.def)
+target_link_libraries(cef_import_fixture_runtime_mismatch PRIVATE ncm_project_options)
+target_include_directories(
+  cef_import_fixture_runtime_mismatch PRIVATE "${PROJECT_SOURCE_DIR}/include")
+target_compile_definitions(
+  cef_import_fixture_runtime_mismatch PRIVATE NCM_CEF_FIXTURE_API_MISMATCH)
+set_target_properties(cef_import_fixture_runtime_mismatch PROPERTIES
+  OUTPUT_NAME "libcef"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_runtime_mismatch"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_runtime_mismatch"
+  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_runtime_mismatch"
+)
+
+add_library(cef_import_fixture_client SHARED
+  cef_import_fixture_client.cpp cef_import_fixture_client.def)
+target_link_libraries(
+  cef_import_fixture_client PRIVATE cef_import_fixture_runtime ncm_project_options)
+target_include_directories(
+  cef_import_fixture_client PRIVATE "${PROJECT_SOURCE_DIR}/include")
+set_target_properties(cef_import_fixture_client PROPERTIES
+  OUTPUT_NAME "cloudmusic"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_client"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_client"
+  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cef_import_client"
+)
+
+add_executable(cef_import_hook_tests cef_import_hook_tests.cpp)
+target_link_libraries(
+  cef_import_hook_tests PRIVATE ncm_cef_injection ncm_project_options)
+add_dependencies(cef_import_hook_tests
+  cef_import_fixture_runtime cef_import_fixture_runtime_mismatch
+  cef_import_fixture_client)
+
+add_test(
+  NAME cef_import_hook_success_tests
+  COMMAND cef_import_hook_tests success
+    $<TARGET_FILE:cef_import_fixture_runtime>
+    $<TARGET_FILE:cef_import_fixture_client>
+)
+add_test(
+  NAME cef_import_hook_mismatch_tests
+  COMMAND cef_import_hook_tests mismatch
+    $<TARGET_FILE:cef_import_fixture_runtime_mismatch>
+    $<TARGET_FILE:cef_import_fixture_client>
+)

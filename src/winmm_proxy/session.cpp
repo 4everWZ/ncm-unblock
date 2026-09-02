@@ -1,5 +1,7 @@
 #include "ncm/winmm_proxy/session.hpp"
 
+#include "ncm/cef_injection/app_wrapper.hpp"
+#include "ncm/cef_injection/import_hook.hpp"
 #include "ncm/winmm_proxy/forwarder.hpp"
 
 #include <Windows.h>
@@ -12,6 +14,71 @@ namespace {
 
 long g_result{static_cast<long>(session_result::pending)};
 config::settings g_settings{};
+
+[[nodiscard]] bool client_image() noexcept {
+  wchar_t path[MAX_PATH]{};
+  const DWORD written = GetModuleFileNameW(nullptr, path, MAX_PATH);
+  if (written == 0 || written >= MAX_PATH) return false;
+  const wchar_t* name = path;
+  for (DWORD index = 0; index < written; ++index) {
+    if (path[index] == L'\\' || path[index] == L'/') name = path + index + 1;
+  }
+  return _wcsicmp(name, L"cloudmusic.exe") == 0;
+}
+
+[[nodiscard]] const char* registration_name() noexcept {
+  switch (cef_injection::current_registration_state()) {
+    case cef_injection::registration_state::not_attempted: return "not_attempted";
+    case cef_injection::registration_state::succeeded: return "succeeded";
+    case cef_injection::registration_state::failed: return "failed";
+  }
+  return "unknown";
+}
+
+[[nodiscard]] bool injection_reporting_enabled() noexcept {
+  return GetEnvironmentVariableW(L"NCM_INJECTION_REPORT_DIR", nullptr, 0) != 0;
+}
+
+void write_injection_report(cef_injection::import_hook_result hook) noexcept {
+  wchar_t directory[MAX_PATH]{};
+  const DWORD length = GetEnvironmentVariableW(
+      L"NCM_INJECTION_REPORT_DIR", directory, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) return;
+
+  wchar_t path[MAX_PATH]{};
+  if (_snwprintf_s(
+          path, _TRUNCATE, L"%s\\injection-%lu.txt", directory,
+          GetCurrentProcessId()) <= 0) return;
+  const HANDLE file = CreateFileW(
+      path, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+      FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) return;
+  char line[256]{};
+  const int written = sprintf_s(
+      line, "pid=%lu hook=%s registration=%s\n", GetCurrentProcessId(),
+      cef_injection::describe(hook), registration_name());
+  if (written > 0) {
+    DWORD ignored{};
+    WriteFile(file, line, static_cast<DWORD>(written), &ignored, nullptr);
+  }
+  CloseHandle(file);
+}
+
+void observe_injection(cef_injection::import_hook_result hook) noexcept {
+  // Runtime polling exists only for an explicitly requested bounded
+  // investigation. Normal product startup performs no observation loop.
+  if (!injection_reporting_enabled()) return;
+  write_injection_report(hook);
+  if (hook != cef_injection::import_hook_result::installed &&
+      hook != cef_injection::import_hook_result::already_installed) return;
+  const auto deadline = GetTickCount64() + 60000;
+  while (cef_injection::current_registration_state() ==
+             cef_injection::registration_state::not_attempted &&
+         GetTickCount64() < deadline) {
+    Sleep(100);
+  }
+  write_injection_report(hook);
+}
 
 void publish(session_result result) noexcept {
   InterlockedExchange(&g_result, static_cast<long>(result));
@@ -90,8 +157,23 @@ void apply_configuration() noexcept {
     // fallback, but it is no longer the production bootstrap's default action.
     // Publishing this boundary makes the unfinished M3 state explicit and
     // guarantees that the primary path starts no external runtime.
-    report(L"configuration accepted; in-process injection is pending");
-    publish(session_result::injection_pending);
+    const auto hook = client_image()
+        ? cef_injection::install_loaded_import_hook(10000)
+        : cef_injection::install_loaded_import_hook();
+    if (hook == cef_injection::import_hook_result::installed ||
+        hook == cef_injection::import_hook_result::already_installed) {
+      report(L"the CEF process entry import is wrapped");
+      publish(session_result::injection_installed);
+    } else if (!client_image() &&
+               hook == cef_injection::import_hook_result::client_not_loaded) {
+      // Synthetic session hosts do not contain cloudmusic.dll. Preserve their
+      // pre-M3 boundary without weakening the real-client path.
+      publish(session_result::injection_pending);
+    } else {
+      report(L"CEF import injection declined; forwarding continues");
+      publish(session_result::injection_failed);
+    }
+    observe_injection(hook);
   } catch (...) {
     // Configuration handling allocates, and a bootstrap failure must never
     // become a host failure.

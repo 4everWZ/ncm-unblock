@@ -242,6 +242,14 @@ An isolated run of the exact client with a process-local `--remote-debugging-por
 
 The consequence is that live frontend exploration depends on the same native hook that injection does. The converse is also true and useful: code that wraps the client's `cef_app_t` in order to inject can set `remote_debugging_port` in the settings it forwards, so a development-time endpoint costs nothing extra once that hook exists.
 
+### Exact-client extension registration
+
+The production bootstrap now waits outside loader lock for the loaded `cloudmusic.dll` and `libcef.dll`, repeats both pinned API hashes, resolves `cef_execute_process` and `cef_register_extension`, and replaces only the named ordinary `cef_execute_process` IAT slot. Its wrapper preserves the client's application and render-handler callbacks and registers the fixed null-handler M3 extension after the client's own `on_web_kit_initialized` callback. Synthetic PE32 fixtures prove successful replacement and hash-mismatch refusal before this path is allowed near the target.
+
+A fresh isolated run against the signed `2.9.7.199711` executable produced a main window and four live client processes. Three fixed-classification reports recorded `hook=installed`; one renderer recorded `registration=succeeded`, proving that the client called the wrapped render callback and its own CEF accepted the extension name and source. The root and another process remained `registration=not_attempted`, as expected for roles that did not reach the renderer callback during the observation window. The run reclaimed only the four processes whose executable paths were under the private experiment root, verified the real `localdata` fingerprint unchanged, and removed the experiment directory.
+
+This result proves live IAT interception, callback forwarding, and successful extension registration. It does not directly observe the marker inside a created V8 context, so it does not yet prove extension-code execution or clear M3. A size-checked `cef_initialize` settings copy that enables a private debugging endpoint is the next observation mechanism.
+
 The same strings identify `orpheus` as the native application framework, not the frontend: `orpheus_runner.cpp`, `orpheus_starter.cpp`, `orpheus_thread_manager.cpp`, `orpheus::OrpheusPostTask`, `orpheus::AppConfig::SaveConfigAsync`, and the switches `orpheus-startup`, `orpheus-restart-for-update`, and `orpheus-allow-mutiapp-run`. A privately maintained Chromium `net/` stack compiled into `cloudmusic.dll` is consistent with the earlier finding that neither ambient proxy environment variables nor a root `--proxy-server` switch routes client traffic.
 
 ### Frontend package format
@@ -293,7 +301,7 @@ Because the callback reads `bm.code` and `bm.data[0]` as ordinary object members
 
 ### Evidence boundary
 
-Everything in this section is static structural inspection of two package files and one module's export directory. It establishes that the anchors exist in the code that ships and in the code that loads. It does not establish that they are reachable at runtime in the state the shim would run in, that `cef_register_extension` succeeds on this build, that a native callback may resolve asynchronously without the retry path above firing or the UI timing out, or that the patched response is honored by whatever consumes the URL afterwards. No client was started for this section and no package was modified.
+The package analysis in this section is static structural inspection of two package files. It establishes that the anchors exist in the code that ships and in the code that loads. The isolated experiment separately proves that `cef_register_extension` succeeds on this build, but does not establish that its marker executes in a V8 context, that the frontend anchors are live when the shim runs, that a native callback may resolve asynchronously without the retry path firing or the UI timing out, or that a patched response is honored. No package was modified.
 
 ## Upstream v0.28.0 checkpoint
 

@@ -31,6 +31,10 @@ namespace {
       return "disabled";
     case ncm::winmm_proxy::session_result::injection_pending:
       return "injection_pending";
+    case ncm::winmm_proxy::session_result::injection_installed:
+      return "injection_installed";
+    case ncm::winmm_proxy::session_result::injection_failed:
+      return "injection_failed";
   }
   return "unknown";
 }

@@ -15,6 +15,11 @@ param(
     # cleanup, and they carry only allowlisted module names.
     [string]$CensusOutputDirectory,
 
+    # Investigation-only output from the production bootstrap. Each process
+    # writes only its pid plus fixed hook/registration classifications; no
+    # client content, URL, request, or user state is recorded.
+    [string]$InjectionOutputDirectory,
+
     # Positive control. When set, the staged proxy is expected to be the test
     # fixture, which resolves its backend from this path. Pointing it at a file
     # that does not exist turns "did NCM actually call the proxy?" into an
@@ -106,12 +111,19 @@ try {
         Write-Output "census-window-seconds: $ObservationSeconds"
         Write-Output 'census-action: sign in and play one normal track, then one greyed-out track.'
     }
+    $injectionEnabled = -not [string]::IsNullOrWhiteSpace($InjectionOutputDirectory)
+    if ($injectionEnabled) {
+        $injectionRoot = (New-Item -ItemType Directory -Force -Path $InjectionOutputDirectory).FullName
+        $startInfo.EnvironmentVariables['NCM_INJECTION_REPORT_DIR'] = $injectionRoot
+        Write-Output "injection-output: $injectionRoot"
+    }
     $launched = [System.Diagnostics.Process]::Start($startInfo)
 
     $deadline = [DateTime]::UtcNow.AddSeconds($ObservationSeconds)
     $observedProxy = $false
     $observedBackend = $false
     $observedWindow = $false
+    $observedRegistration = $false
     $snapshot = $null
     do {
         Start-Sleep -Milliseconds 500
@@ -127,8 +139,15 @@ try {
         } catch {
             # The root can exit while its window state is being read.
         }
+        if ($injectionEnabled) {
+            $observedRegistration = @(Get-ChildItem -LiteralPath $injectionRoot `
+                    -Filter 'injection-*.txt' -File -ErrorAction SilentlyContinue |
+                Select-String -SimpleMatch 'registration=succeeded').Count -ne 0
+        }
     } while ([DateTime]::UtcNow -lt $deadline -and
-             ($censusEnabled -or -not ($observedProxy -and $observedBackend -and $observedWindow)))
+             ($censusEnabled -or
+              ($injectionEnabled -and -not $observedRegistration) -or
+              -not ($observedProxy -and $observedBackend -and $observedWindow)))
 
     $exited = $launched.HasExited
     Write-Output "root-exited-early: $exited"
@@ -172,6 +191,17 @@ try {
         if ($reports.Count -eq 0) {
             Write-Output 'census-warning: no report was written, so the census proxy did not run.'
         }
+    }
+
+    if ($injectionEnabled) {
+        $injectionReports = @(Get-ChildItem -LiteralPath $injectionRoot `
+            -Filter 'injection-*.txt' -File -ErrorAction SilentlyContinue)
+        Write-Output "injection-reports: $($injectionReports.Count)"
+        foreach ($report in $injectionReports) {
+            $classification = (Get-Content -LiteralPath $report.FullName -Raw).Trim()
+            Write-Output "  $($report.Name): $classification"
+        }
+        Write-Output "extension-registration-observed: $observedRegistration"
     }
 
     if (-not $launched.HasExited) {
