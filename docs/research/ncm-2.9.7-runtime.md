@@ -6,9 +6,9 @@ This report records reproducible investigation evidence. It is not the product c
 
 - **Target observed:** NetEase Cloud Music `2.9.7.199711` at `D:\Program Files (x86)\Netease\CloudMusic\cloudmusic.exe` on Windows.
 - **Snapshot date:** 2026-09-01.
-- **Methods:** The repository's Win32 `ncm_runtime_probe` and bounded loopback proxy observer, Visual Studio `dumpbin`, Windows Authenticode verification, process/module snapshots, process command lines, IPv4 TCP ownership inspection, local client-state inspection, and upstream primary sources.
-- **Controlled scope:** No installed target files, NCM proxy settings, system proxy values, or certificates were changed. Controlled NCM instances were launched and, after normal close only minimized to the tray, their recorded experiment processes were terminated under explicit authorization. Private `localdata` was snapshotted outside the repository and fully restored. No payload content or credentials were captured or forwarded.
-- **Not established:** Playback-request routing, HTTP/HTTPS proxy behavior, certificate requirements, UNM compatibility, stable loader behavior, or performance.
+- **Methods:** The repository's Win32 `ncm_runtime_probe` and bounded loopback proxy observer, Visual Studio `dumpbin`, Windows Authenticode verification, process/module snapshots, process command lines, IPv4 TCP ownership inspection, local client-state inspection, read-only structural inspection of the shipped and hot-updated frontend packages, and upstream primary sources.
+- **Controlled scope:** No installed target files, NCM proxy settings, system proxy values, or certificates were changed. Controlled NCM instances were launched and, after normal close only minimized to the tray, their recorded experiment processes were terminated under explicit authorization. Private `localdata` was snapshotted outside the repository and fully restored. The frontend packages were read without being modified, extracted into the repository, or written back. No payload content or credentials were captured or forwarded.
+- **Not established:** Playback-request routing, HTTP/HTTPS proxy behavior, certificate requirements, UNM compatibility, stable loader behavior, performance, or whether the frontend tolerates an asynchronously resolved native callback.
 
 ## Static image facts
 
@@ -170,7 +170,130 @@ The census records allowlisted module base names and fixed classifications only;
 
 ### Status
 
-The census module, the census proxy, and the probe mode are implemented and covered by focused tests: the allowlist classifies by family and rejects a longer name that merely starts with an exact rule; a lazy `winhttp.dll` load is captured as a post-snapshot event and attributed; and the report carries the process role, the timeline, and totals with no drops inside its fixed capacity. The run against the real client has not been performed, so no stack is attributed yet.
+The census module, the census proxy, and the probe mode are implemented and covered by focused tests: the allowlist classifies by family and rejects a longer name that merely starts with an exact rule; a lazy `winhttp.dll` load is captured as a post-snapshot event and attributed; and the report carries the process role, the timeline, and totals with no drops inside its fixed capacity.
+
+A 600-second run against an isolated copy of the exact client returned the pre-registered inconclusive branch. Four timelines were written — one root, two renderer, one GPU — and the root recorded 20 classified loads out of 167 observed modules with no drops, flushing its final report at the window deadline. Every candidate stack was already mapped in the root within the first 1.25 seconds: winsock (`WS2_32`, `NSI`, `mswsock`), WinHTTP, WinINet (`WININET`, `urlmon`), Schannel (`SspiCli`, `Secur32`, `schannel`, `ncrypt`, `ncryptsslp`), libcurl, and CEF (`libcef`). The `audio_render` family appears at 609–1250 ms as startup device initialization rather than as first playback, so the intended anchor is unusable. Sign-in and playback occupied the remaining 599 seconds and produced no further classified load in any process, and no OpenSSL-family module mapped anywhere.
+
+The experiment therefore failed on its own terms and no stack is attributed. Module-load timing carries no playback signal in this client, and no further module-load observation can supply one, because every candidate is resident before the first track plays. The census is retained as the 32-bit module inventory it does establish. The escalation it names — a process-local environment-proxy differential — was run and is recorded above.
+
+## Embedded browser and frontend layer
+
+### Changed claim
+
+NCM 2.9.7 resolves playable track URLs through business-layer JavaScript running in its own embedded browser, so the response can be observed and patched in an already-decrypted object without touching HTTP, TLS, or EAPI. This section records what static inspection establishes and what it does not.
+
+### CEF module
+
+`libcef.dll` in the installed tree reports file and product version `3.1916.1900` with a `2018-03-15` export time stamp. Branch 1916 corresponds to Chromium 35, which matches the `Chrome/35.0.1916.157` product token already observed on the client's own command lines. The module exports 149 symbols at ordinal base 1.
+
+The exported surface includes the pieces a native integration would use:
+
+| Capability | Exports |
+|---|---|
+| Process entry and lifecycle | `cef_execute_process`, `cef_initialize`, `cef_shutdown`, `cef_run_message_loop`, `cef_quit_message_loop`, `cef_do_message_loop_work` |
+| JavaScript extension registration | `cef_register_extension` |
+| V8 value and context construction | `cef_v8context_get_current_context`, `cef_v8context_get_entered_context`, `cef_v8context_in_context`, `cef_v8value_create_function`, `cef_v8value_create_object`, `cef_v8value_create_array`, `cef_v8value_create_string`, and the remaining `cef_v8value_create_*` constructors |
+| Cross-process messaging | `cef_process_message_create` |
+| Thread marshalling | `cef_post_task`, `cef_post_delayed_task`, `cef_currently_on`, `cef_task_runner_get_for_thread`, `cef_task_runner_get_for_current_thread` |
+| Browser creation | `cef_browser_host_create_browser`, `cef_browser_host_create_browser_sync` |
+| Scheme and request handling | `cef_register_scheme_handler_factory`, `cef_urlrequest_create`, `cef_request_create`, `cef_response_create` |
+| Version identification | `cef_version_info`, `cef_build_revision`, `cef_api_hash` |
+
+Two consequences follow. First, a native integration does not have to hook a CEF callback struct to inject JavaScript: `cef_register_extension` is an exported free function that installs an extension into every V8 context. Second, the reference Windows injectors are not transferable. Verdant and BetterNCM target CEF 90 and later, where the C API struct layouts, member ordering, and callback slots differ from branch 1916; their hook offsets and struct definitions carry no validity here.
+
+The client is further removed from a stock CEF release than the version alone implies. Debug path strings inside `cloudmusic.dll` place the build under `orpheus\src\third_party\partial-chromium\src\`, with `base/`, `net/`, `crypto/`, `url/`, `net/spdy/`, `net/quic/`, and `net/socket/` subtrees. NetEase ships a reduced, privately modified Chromium rather than an unmodified upstream one, so published CEF 3.1916 headers are a starting point for struct layouts and not an authority.
+
+### Measured API revision
+
+`ncm_cef_probe` loads the client's own `libcef.dll` by absolute path and reads what the module reports about itself. Against the installed target:
+
+| Property | Value |
+|---|---|
+| Argument cleanup | caller-cleans (`__cdecl`), stack delta `-4` |
+| `cef_api_hash(0)` platform | `78d4b4eb20e36e2b08572b98645dde08e987fbad` |
+| `cef_api_hash(1)` universal | `ce45d134468cd9bad310409c96e5108d75fac3c7` |
+| `cef_api_hash(2)` commit | unavailable |
+| `cef_build_revision()` | `1900` |
+| `cef_version_info` 0–5 | CEF major `3`, CEF revision `1900`, Chrome `35.0.1916.157` |
+| Required entry points absent | `0` of 14 |
+
+The version string `3.1916.1900` decomposes as CEF major 3, Chromium build 1916, CEF revision 1900, which the individual `cef_version_info` entries confirm rather than merely restate.
+
+The calling convention is measured, not assumed. The probe pushes one argument, compares the stack pointer across the call, and classifies a four-byte shortfall as caller-cleanup and a restored pointer as callee-cleanup; a delta that disagrees between calls fails the read outright. The same source is built as a `__cdecl` fixture and a `__stdcall` fixture, so a probe that hardcoded either answer would fail against the other. This matters because a wrong convention against a real module corrupts the caller's stack silently rather than returning a wrong value.
+
+The two API hashes are the durable identity of this build's C API surface. Any struct layout the project later relies on must be reconciled against them, and the bootstrap must re-read them at startup and decline rather than proceed if they differ from the pinned pair. The commit hash is empty on this build, so it supplies no additional identity.
+
+### The C API surface is stock
+
+`cef_version.h` is generated at build time and is not committed to the CEF repository, so the comparison is against published built distributions of the same branch. Two independently vendored CEF 3.1916 distributions define:
+
+```c
+#define CEF_API_HASH_UNIVERSAL "ce45d134468cd9bad310409c96e5108d75fac3c7"
+#define CEF_API_HASH_PLATFORM  "78d4b4eb20e36e2b08572b98645dde08e987fbad"  /* OS_WIN */
+```
+
+Both match the client's module exactly, while their version constants do not: those distributions carry `CEF_REVISION` 1721 and 1781 over Chromium 35.0.1916.86 and 35.0.1916.138, against the client's revision 1900 over 35.0.1916.157. The client is therefore a later CEF revision on the same branch, and the identical hashes are the branch's C API surface being unchanged across those revisions — which is precisely what an API hash asserts.
+
+NetEase's `partial-chromium` modifications are therefore internal. They do not reach the CEF C boundary, and published CEF 3.1916 headers describe this module's struct layouts. This closes the question that gated every native design decision: struct layouts may be taken from that header set, provided the bootstrap asserts the hash pair at startup and declines when it differs.
+
+### Remote debugging is not reachable from the command line
+
+An isolated run of the exact client with a process-local `--remote-debugging-port` opened no endpoint within 60 seconds, so no debugging endpoint is available to explore the live frontend with. This is consistent with CEF3, where the DevTools HTTP server is started from `CefSettings.remote_debugging_port` and settings are converted into command-line switches for the browser process rather than read back from them. It matches the earlier finding that a root `--proxy-server` switch appears on the command line without taking effect.
+
+The consequence is that live frontend exploration depends on the same native hook that injection does. The converse is also true and useful: code that wraps the client's `cef_app_t` in order to inject can set `remote_debugging_port` in the settings it forwards, so a development-time endpoint costs nothing extra once that hook exists.
+
+The same strings identify `orpheus` as the native application framework, not the frontend: `orpheus_runner.cpp`, `orpheus_starter.cpp`, `orpheus_thread_manager.cpp`, `orpheus::OrpheusPostTask`, `orpheus::AppConfig::SaveConfigAsync`, and the switches `orpheus-startup`, `orpheus-restart-for-update`, and `orpheus-allow-mutiapp-run`. A privately maintained Chromium `net/` stack compiled into `cloudmusic.dll` is consistent with the earlier finding that neither ambient proxy environment variables nor a root `--proxy-server` switch routes client traffic.
+
+### Frontend package format
+
+The installed `package\orpheus.ntpk` is 19,332,902 bytes. It is not the sibling `NTPK`-magic container used by `package\native.ntpk`: the first 100 bytes are a header consisting of 37 ASCII hexadecimal characters followed by 63 bytes of binary, and a standard ZIP local file header begins at offset 100. The archive holds 2,601 entries, uses ordinary deflate, and sets no encryption flag, so entry names and contents are readable without any key.
+
+The layout is a hybrid of two application generations under `pub/`: a legacy NEJ-based main UI (`pub/core.js`, `pub/app.html`, and 178 `pub/module/**/index.html` pages) alongside a newer webpack build under `pub/hybrid/` carrying React 16.14, `@cloudmusic-desktop`, and split chunks named `app.chunk.js`, `login.chunk.js`, `runtime~*.bundle.js`, and `vendors~*.chunk.js`.
+
+Pages are served to the embedded browser over a private scheme rather than from disk or the network. `pub/core.js` sets `webroot:"orpheus://orpheus/pub/"` and builds resource URLs such as `orpheus://orpheus/style/res/`. The client's own storage confirms the resulting origin: `%LOCALAPPDATA%\Netease\CloudMusic\webapp\Local Storage\orpheus_orpheus_0.localstorage`. This is the consumer of the exported `cef_register_scheme_handler_factory`.
+
+### The frontend hot-updates independently of the client version
+
+The installed `package\orpheus.ntpk` is dated 2022-01-25, but `%LOCALAPPDATA%\Netease\CloudMusic\web.pack` is dated 2025-09-09, is 19,332,799 bytes, has the identical 100-byte-header-plus-ZIP structure and the same 2,601 entries, and is the package that actually loads. Frontend evidence must therefore be read from `web.pack`, and the pinned client version does not pin the frontend.
+
+Comparing the two packages shows exactly which anchors survive an update. Minified identifiers drift: the same player-URL request method is `ba.dnn` calling `this.bTY(bo)` and `this.dno.bh(this,cJ)` in the shipped package, and `ba.dno` calling `this.bTZ(bo)` and `this.dnp.bh(this,cJ)` in the loaded one. String literals, framework entry points, and API field names are unchanged across the pair.
+
+The design rule this implies is that a shim may anchor only on stable artifacts — request path literals, the NEJ module registry, and response field names — and never on a minified identifier, because a hook bound to one would fail silently at the next frontend update rather than at a client upgrade.
+
+### Framework and hook anchors
+
+Measured against `pub/core.js` in the loaded `web.pack` (2,251,126 bytes):
+
+| Anchor | Occurrences | Status |
+|---|---|---|
+| `window.nej` | 0 | absent |
+| `window.nm` | 0 | absent |
+| `window.NEJ` | 3 | present |
+| `NEJ.P` | 326 | present |
+| `nej.ut.j` | 17 | present |
+| `privilege` | 182 | present |
+| `/api/song/enhance/player/url` | 3 | present |
+| `orpheus://` | 53 | present |
+
+The globals named by the upstream browser port do not exist, but the framework behind them does. Modules are resolved through the registry rather than through a global object, in the form `var bf=NEJ.P, ep=bf("nej.h"), bY=bf("nej.ut.j")`. The `nej.h` module supplies the transport factory `ep.cXs=function(){return new XMLHttpRequest}`. The upstream hook target `window.nej.j` therefore has an equivalent here, reached as `NEJ.P('nej.ut.j')`, and the upstream port's specific expression of it does not apply unchanged.
+
+### Player URL request site
+
+All three `/api/song/enhance/player/url` references in the loaded package go through one dispatcher shape, `bc.hb(path, params, callback)`:
+
+```js
+bc.hb("/api/song/enhance/player/url",
+      {ids:[JSON.stringify(this.bTZ(bo))], br: iY*1e3},
+      this.bpo.bh(this, ca, bo, jN, iY, cJ, {time:3}))
+```
+
+The callback treats a response as usable when `bm.code==200 && bm.data && bm.data[0] && bm.data[0].code==200`, and retries up to three times while `bm.code==fS.Lp && !bm.data && !bm.rawdata`. Two adjacent endpoints exist and are separate concerns: `/api/event/enhance/player/url` for event audio and `/api/cloudvideo/playurl` for video.
+
+Because the callback reads `bm.code` and `bm.data[0]` as ordinary object members, the response reaching this layer is already decrypted, whatever EAPI handling occurs beneath it. This is the property that makes a business-layer patch possible without reimplementing EAPI, TLS interception, or a proxy.
+
+### Evidence boundary
+
+Everything in this section is static structural inspection of two package files and one module's export directory. It establishes that the anchors exist in the code that ships and in the code that loads. It does not establish that they are reachable at runtime in the state the shim would run in, that `cef_register_extension` succeeds on this build, that a native callback may resolve asynchronously without the retry path above firing or the UI timing out, or that the patched response is honored by whatever consumes the URL afterwards. No client was started for this section and no package was modified.
 
 ## Upstream v0.28.0 checkpoint
 
@@ -182,12 +305,21 @@ HTTPS is currently blocked at the trust-design level. The upstream [CONNECT path
 
 The project declares `LGPL-3.0-only` in its [package metadata](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/package.json) and distributes [GPLv3](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/COPYING) and [LGPLv3](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/COPYING.LESSER) texts. Before redistribution, this repository still needs a corresponding-source route plus a license/notice audit for the embedded Node runtime and bundled dependencies. No upstream executable was downloaded, executed, or approved for redistribution in this checkpoint.
 
-## Remaining M0 experiments
+## Remaining experiments
 
-1. Identify how 2.9.7 persists its client-local proxy state and prove an exact read/write/rollback cycle without copying private values into the repository.
-2. Route a controlled, non-sensitive request through the validated loopback observer to distinguish whether 2.9.7 honors its HTTP proxy for HTTPS destinations and whether it uses CONNECT.
-3. Repeat connection ownership snapshots around search, normal-track play, unavailable-track play, and track changes; use stack-specific tracing only if ownership remains ambiguous.
-4. Inspect loader candidates for search order and complete export forwarding in an isolated copy, not the installed client directory.
-5. Pin an upstream UNM Windows artifact only after verifying authenticity, target compatibility, certificate lifecycle, corresponding source, and bundled dependency notices in addition to its already-audited source, version, architecture, CLI, and initialization behavior.
+The frontend evidence above redirects the open questions from the network layer to the embedded browser. These are ordered so that each one can falsify the business-layer approach before the next is built.
 
-The launcher compatibility go/no-go remains open until the NCM-to-loopback-UNM matrix covers search, normal tracks, unavailable tracks, play, and track changes.
+1. Pin the actual CEF API revision by calling `cef_api_hash`, `cef_version_info`, and `cef_build_revision` from an x86 harness, and reconcile the result against published CEF 3.1916 headers before any struct layout is relied on.
+2. Establish that `cef_register_extension` with a null handler injects JavaScript into this client's contexts, which is the smallest injection that depends on no struct layout at all.
+3. Establish that the injected context can reach the framework registry and the player-URL dispatcher at the time the shim runs. An extension executes before page scripts, so the shim has to defer until the registry exists; which deferral is available is unmeasured.
+4. Establish whether a native callback may resolve asynchronously without the dispatcher's three-attempt retry firing or the UI timing out. This is the load-bearing unknown for the whole architecture and nothing beyond a mocked matcher should be built before it is answered.
+5. Only then attach a native matcher, and only then extend an isolated run from "the client reaches its UI" to search, normal-track play, unavailable-track play, and track changes.
+
+These remain recorded but are demoted to the fallback path, and are not on the critical path while the business-layer route is open:
+
+- Identify how 2.9.7 persists its client-local proxy state and prove an exact read/write/rollback cycle without copying private values into the repository.
+- Route a controlled, non-sensitive request through the validated loopback observer to distinguish whether 2.9.7 honors its HTTP proxy for HTTPS destinations and whether it uses `CONNECT`.
+- Repeat connection ownership snapshots around search, normal-track play, unavailable-track play, and track changes.
+- Pin an upstream UNM Windows artifact only after verifying authenticity, target compatibility, certificate lifecycle, corresponding source, and bundled dependency notices in addition to its already-audited source, version, architecture, CLI, and initialization behavior.
+
+Loader-candidate inspection is closed: the WinMM boundary is verified in the exact client with a positive control, and it carries the bootstrap for either path.

@@ -1,0 +1,7 @@
+; Exports the fixture's entry points under undecorated names, so one source can
+; be built under either x86 argument-cleanup contract and still present the
+; names a browser runtime exports.
+EXPORTS
+  cef_api_hash
+  cef_version_info
+  cef_build_revision

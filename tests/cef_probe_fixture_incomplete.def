@@ -1,0 +1,5 @@
+; Negative control: a module that identifies nothing. It withholds the export
+; the probe requires while still exporting one of the optional ones, so a probe
+; that treated a partial answer as success would pass here.
+EXPORTS
+  cef_build_revision

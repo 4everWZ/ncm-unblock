@@ -1,6 +1,8 @@
 # ncm-unblock-297
 
-A native-first Windows integration for running an upstream UnblockNeteaseMusic core only while NetEase Cloud Music 2.9.7 is in use.
+A native-first Windows integration that makes unavailable tracks playable in NetEase Cloud Music 2.9.7 from inside the client itself — no proxy server, no separate runtime, and no resident process.
+
+The bootstrap loads through a verified proxy-DLL boundary, injects a small JavaScript shim into the client's own embedded browser, and answers the shim's match requests from an in-process native matcher. A launcher-owned upstream UnblockNeteaseMusic sidecar is implemented and retained as the gated fallback, not the primary path.
 
 The project is in the investigation and bootstrap stage. The current product contract is in [the canonical specification](docs/specs/ncm-unblock-297.md), and resumable work is tracked in [the current work plan](docs/plans/ncm-unblock-297.md).
 
@@ -22,6 +24,23 @@ Inspect the local NCM executable without changing it:
 ./build/win32-debug/src/runtime_probe/ncm_runtime_probe.exe `
   'C:\Path\To\CloudMusic\cloudmusic.exe'
 ```
+
+Read what the client's embedded browser reports about itself:
+
+```powershell
+./build/win32-release/src/cef_probe/ncm_cef_probe.exe `
+  'C:\Path\To\CloudMusic\libcef.dll'
+```
+
+The probe loads the module by absolute path and prints its API hashes, version fields, build revision, and the presence of the entry points the design depends on. It measures the x86 argument-cleanup contract instead of assuming one, and refuses a module that does not identify itself rather than returning a partial answer. It exits non-zero when a required entry point is absent.
+
+Explore the client's live frontend through its own debugging endpoint:
+
+```powershell
+./tools/probe-ncm-devtools.ps1
+```
+
+The run starts an isolated copy with a process-local `--remote-debugging-port`, and reports whether the client honours it. If it does, the probe evaluates a fixed anchor battery in every page context, installs a classification-only recorder over `XMLHttpRequest`, and holds while an operator plays a normal track and a greyed-out track. The report carries framework shapes and response classifications only — never page content, request bodies, URLs, titles, cookies, or credentials. The installed tree is never modified.
 
 Run the bounded loopback proxy observer for controlled experiments:
 

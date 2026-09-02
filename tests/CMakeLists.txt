@@ -168,3 +168,34 @@ target_link_libraries(
   network_stack_census_tests PRIVATE ncm_network_stack_census ncm_project_options)
 
 add_test(NAME network_stack_census_tests COMMAND network_stack_census_tests)
+
+# Synthetic browser-runtime identification exports. The same source is built
+# under both x86 argument-cleanup contracts, so a probe that assumed one instead
+# of measuring it would fail against the other build.
+add_library(cef_probe_fixture SHARED cef_probe_fixture.cpp cef_probe_fixture.def)
+target_link_libraries(cef_probe_fixture PRIVATE ncm_project_options)
+
+add_library(cef_probe_fixture_stdcall SHARED cef_probe_fixture.cpp cef_probe_fixture.def)
+target_link_libraries(cef_probe_fixture_stdcall PRIVATE ncm_project_options)
+target_compile_definitions(cef_probe_fixture_stdcall PRIVATE NCM_CEF_FIXTURE_STDCALL)
+
+# Withholds the export the probe requires while still answering an optional one.
+add_library(cef_probe_fixture_incomplete SHARED
+  cef_probe_fixture.cpp
+  cef_probe_fixture_incomplete.def
+)
+target_link_libraries(cef_probe_fixture_incomplete PRIVATE ncm_project_options)
+
+add_executable(cef_probe_tests cef_probe_tests.cpp)
+target_link_libraries(cef_probe_tests PRIVATE ncm_cef_probe_lib ncm_project_options)
+add_dependencies(cef_probe_tests
+  cef_probe_fixture cef_probe_fixture_stdcall cef_probe_fixture_incomplete
+)
+
+add_test(
+  NAME cef_probe_tests
+  COMMAND cef_probe_tests
+    $<TARGET_FILE:cef_probe_fixture>
+    $<TARGET_FILE:cef_probe_fixture_stdcall>
+    $<TARGET_FILE:cef_probe_fixture_incomplete>
+)

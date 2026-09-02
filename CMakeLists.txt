@@ -28,6 +28,7 @@ include(CTest)
 
 add_subdirectory(src/runtime_probe)
 add_subdirectory(src/module_load_probe)
+add_subdirectory(src/cef_probe)
 add_subdirectory(src/proxy_observer)
 add_subdirectory(src/launcher)
 add_subdirectory(src/bootstrap)
