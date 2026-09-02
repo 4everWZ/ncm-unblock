@@ -162,3 +162,9 @@ add_test(
     $<TARGET_FILE:winmm_backend_fixture>
     $<TARGET_FILE:managed_process_test_child>
 )
+
+add_executable(network_stack_census_tests network_stack_census_tests.cpp)
+target_link_libraries(
+  network_stack_census_tests PRIVATE ncm_network_stack_census ncm_project_options)
+
+add_test(NAME network_stack_census_tests COMMAND network_stack_census_tests)

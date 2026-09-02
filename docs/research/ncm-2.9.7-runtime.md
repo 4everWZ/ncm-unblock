@@ -33,7 +33,7 @@ A live snapshot contained:
 
 The command lines identify an embedded `Chrome/35.0.1916.157` / NCM `2.9.7.199711` runtime. The root, GPU, and renderer processes all loaded `WINHTTP.dll`, `WININET.dll`, `libcurl.dll`, `libcef.dll`, and `netutils.dll` in the observed session. Only the root `cloudmusic.exe` owned observed IPv4 TCP sockets; GPU and renderer children owned none in the same snapshot.
 
-This supports the narrow hypothesis that current client network activity is brokered by the root process. It does not identify which stack carries playback requests, because shared module presence is not call-path evidence and the snapshot was not synchronized to a play action.
+This supports the narrow hypothesis that current client network activity is brokered by the root process. It does not identify which stack carries playback requests, because shared module presence is not call-path evidence and the snapshot was not synchronized to a play action. The in-process census below is the experiment that attempts that attribution.
 
 ## Loader hypotheses
 
@@ -136,6 +136,41 @@ The normal main-window close request activated NCM's close-to-tray behavior rath
 A public [2.9.7 procedure](https://jingyan.baidu.com/article/ac6a9a5e155c506a653eacbe.html) and a separate [restart-prompt procedure](https://jingyan.baidu.com/article/7908e85c70a95bee491ad270.html) corroborate the settings path `settings → tools → HTTP proxy → custom proxy`, including server/port fields and a restart prompt. The embedded settings controls were not exposed through Windows UI Automation. Attempts gated to the exact signed version, executable path, foreground window, and expected layout did not cause `localdata` to persist a proxy change; each run was therefore recovered without claiming that the client-local proxy was configured. Fragile coordinate automation is not a reproducible compatibility method and has been stopped.
 
 The experiment harness prints its private recovery directory before launching NCM and warns that a second interrupt must not interrupt recovery. If an external host termination leaves that directory behind, `tools/restore-ncm-proxy-experiment.ps1` validates the exact temporary-directory and bundle identity, private owner/DACL, non-reparse files, current-user target, bundle-owned sibling paths, backup length and SHA-256 integrity record, and stopped-process boundary before atomically restoring bytes, timestamps, attributes, and owner/group/DACL. A synthetic-profile recovery test passed; this validates recovery mechanics, not NCM routing.
+
+## Playback traffic attribution
+
+### Changed claim
+
+One of `libcurl`, `WinHTTP`, `WinINet`, or the CEF/Chromium network stack carries NCM 2.9.7 playback requests, and the carrying stack can be named from module-load behavior observed inside the client rather than from module presence.
+
+The existing evidence cannot decide this. The root, GPU, and renderer processes all map `WINHTTP.dll`, `WININET.dll`, `libcurl.dll`, and `libcef.dll`, so presence is not attribution, and the earlier snapshot was not synchronized to a play action. A 64-bit observer also reads only 7 modules from the WOW64 root, so the enumeration itself was never complete.
+
+### Mechanism
+
+The proxy already executes inside the exact x86 client, which is the missing 32-bit vantage point. A census-flavored `winmm.dll` carries the same generated thunks, the same forwarder, and the same absolute-system-path backend as the release proxy, and differs only in the bootstrap body it schedules. Staging it therefore changes the observation and nothing else about the load boundary.
+
+The census registers `LdrRegisterDllNotification` and then snapshots the already-mapped modules. Registration comes first on purpose: a module mapped between the two steps is reported twice rather than missed, and a duplicate is visible in the report while a gap would not be. Every isolated process in the tree writes its own timeline, tagged with the role read from its `--type=` switch, so root, renderer, GPU, and utility processes are separated rather than merged.
+
+The loader callback runs with the loader lock held, so the recording path allocates nothing, loads nothing, and writes no file: it classifies the base name against a fixed allowlist, claims a slot in fixed storage with one interlocked increment, and publishes with a second counter. Flushing the report is left to the census thread on a bounded window. That polling flush is investigation tooling and is not the event-driven target design.
+
+### Discriminator
+
+Each recorded transition carries elapsed milliseconds since the census started, so the timeline orders network-stack loads against `audio_render` loads (`audioses.dll`, `mmdevapi.dll`, `audioeng.dll`, `avrt.dll`, `wdmaud.drv`, `msacm32.dll`, `ksuser.dll`, `xaudio2*`), which stand in for the moment playback actually begins.
+
+- A stack that maps lazily, in the root process, immediately before the first `audio_render` load is the strongest available attribution short of call-level tracing.
+- A stack already present in the startup snapshot of every process is not attributed by this experiment at all.
+
+### Falsifier
+
+If every candidate stack appears in the startup snapshot and no candidate loads near the first `audio_render` transition, then module-load timing does not attribute playback and this experiment has failed on its own terms. The recorded outcome is then "inconclusive", not a default to any stack, and attribution has to escalate to a call-level or differential method — the next cheapest being a process-local `http_proxy`/`https_proxy` environment differential, which only an environment-reading stack such as libcurl would honor and which changes no system or client-persistent state.
+
+### Safety
+
+The census records allowlisted module base names and fixed classifications only; it never emits full paths, request targets, headers, or credentials. It routes nothing and is not part of the release surface. It runs only through the isolated-copy probe, which refuses to start while any client process exists, redirects `%LOCALAPPDATA%` into a private directory, verifies the real `localdata` unchanged, and force-closes only processes whose image lives under that run's private directory. Reports are written outside the private run directory so they survive its cleanup.
+
+### Status
+
+The census module, the census proxy, and the probe mode are implemented and covered by focused tests: the allowlist classifies by family and rejects a longer name that merely starts with an exact rule; a lazy `winhttp.dll` load is captured as a post-snapshot event and attributed; and the report carries the process role, the timeline, and totals with no drops inside its fixed capacity. The run against the real client has not been performed, so no stack is attributed yet.
 
 ## Upstream v0.28.0 checkpoint
 

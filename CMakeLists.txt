@@ -33,6 +33,8 @@ add_subdirectory(src/launcher)
 add_subdirectory(src/bootstrap)
 add_subdirectory(src/config)
 add_subdirectory(src/winmm_proxy)
+# Must follow the proxy: it consumes the generated forwarder sources.
+add_subdirectory(src/network_stack_census)
 
 if(BUILD_TESTING)
   add_subdirectory(tests)

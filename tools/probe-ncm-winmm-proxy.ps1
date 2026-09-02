@@ -4,8 +4,16 @@ param(
 
     [string]$ProxyPath,
 
-    [ValidateRange(5, 300)]
+    [ValidateRange(5, 900)]
     [int]$ObservationSeconds = 30,
+
+    # Playback-attribution experiment. When set, the staged proxy is expected to
+    # be the census build: every isolated process writes a module-load timeline
+    # into this directory, and the run holds for the whole observation window so
+    # an operator can sign in and play a track while the timeline records.
+    # Reports are written outside the private run directory so they survive its
+    # cleanup, and they carry only allowlisted module names.
+    [string]$CensusOutputDirectory,
 
     # Positive control. When set, the staged proxy is expected to be the test
     # fixture, which resolves its backend from this path. Pointing it at a file
@@ -199,6 +207,15 @@ try {
         $startInfo.EnvironmentVariables['NCM_WINMM_FIXTURE_BACKEND'] = $FixtureBackend
         Write-Output "fixture-backend: $FixtureBackend"
     }
+    $censusEnabled = -not [string]::IsNullOrWhiteSpace($CensusOutputDirectory)
+    if ($censusEnabled) {
+        $censusRoot = (New-Item -ItemType Directory -Force -Path $CensusOutputDirectory).FullName
+        $startInfo.EnvironmentVariables['NCM_CENSUS_REPORT_DIR'] = $censusRoot
+        $startInfo.EnvironmentVariables['NCM_CENSUS_WINDOW_MS'] = [string]($ObservationSeconds * 1000)
+        Write-Output "census-output: $censusRoot"
+        Write-Output "census-window-seconds: $ObservationSeconds"
+        Write-Output 'census-action: sign in and play one normal track, then one greyed-out track.'
+    }
     $launched = [System.Diagnostics.Process]::Start($startInfo)
 
     $deadline = [DateTime]::UtcNow.AddSeconds($ObservationSeconds)
@@ -220,8 +237,8 @@ try {
         } catch {
             # The root can exit while its window state is being read.
         }
-    } while (-not ($observedProxy -and $observedBackend -and $observedWindow) -and
-             [DateTime]::UtcNow -lt $deadline)
+    } while ([DateTime]::UtcNow -lt $deadline -and
+             ($censusEnabled -or -not ($observedProxy -and $observedBackend -and $observedWindow)))
 
     $exited = $launched.HasExited
     Write-Output "root-exited-early: $exited"
@@ -246,6 +263,26 @@ try {
         }
     }
     Write-Output "isolated-processes: $(@(Get-IsolatedProcesses -Root $root.FullName).Count)"
+
+    if ($censusEnabled) {
+        # The census threads flush at their own deadline, which is the same as
+        # this loop's, so give them a bounded moment to write the final report.
+        Start-Sleep -Seconds 3
+        $reports = @(Get-ChildItem -LiteralPath $censusRoot -Filter 'census-*.txt' -File -ErrorAction SilentlyContinue)
+        Write-Output "census-reports: $($reports.Count)"
+        foreach ($report in $reports) {
+            $lines = @(Get-Content -LiteralPath $report.FullName)
+            $totals = @($lines | Where-Object { $_ -like 'totals *' })
+            $stacks = @($lines |
+                Where-Object { $_ -like 'event * load *' } |
+                ForEach-Object { ($_ -split ' ')[3] } |
+                Sort-Object -Unique)
+            Write-Output "  $($report.Name): $($totals -join '') stacks=[$($stacks -join ',')]"
+        }
+        if ($reports.Count -eq 0) {
+            Write-Output 'census-warning: no report was written, so the census proxy did not run.'
+        }
+    }
 
     if (-not $launched.HasExited) {
         [void]$launched.CloseMainWindow()

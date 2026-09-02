@@ -57,3 +57,14 @@ Start an isolated copy of the exact client with the proxy beside it:
 ```
 
 The installed tree is copied to a private directory and never modified, the run refuses to start while any client process exists, and only processes whose image lives under that private directory are ever reclaimed. Pass `-ProxyPath` and `-FixtureBackend` to run the positive control, which points the test fixture at a backend that does not exist and expects the client to stop with the proxy's `0xE0C40001`.
+
+Attribute playback traffic to a network stack by staging the census build of the proxy instead:
+
+```powershell
+./tools/probe-ncm-winmm-proxy.ps1 `
+  -ProxyPath ./build/win32-release/src/network_stack_census/census_proxy/winmm.dll `
+  -CensusOutputDirectory $env:TEMP\ncm-census `
+  -ObservationSeconds 600
+```
+
+The census proxy forwards the same pinned surface as the release proxy and only differs in the bootstrap body it schedules. Every isolated process writes a module-load timeline tagged with its process role, recording allowlisted module names and fixed classifications only — never paths, request targets, headers, or credentials. It routes nothing. The run holds for the whole window so an operator can sign in and play one normal track and one greyed-out track; the discriminator is a network stack that maps lazily in the root process just before the first `audio_render` load.
