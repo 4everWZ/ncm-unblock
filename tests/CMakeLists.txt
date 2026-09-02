@@ -152,7 +152,7 @@ add_executable(winmm_session_tests winmm_session_tests.cpp)
 target_link_libraries(winmm_session_tests PRIVATE ncm_project_options)
 add_dependencies(
   winmm_session_tests
-  winmm_session_probe winmm_backend_fixture managed_process_test_child
+  winmm_session_probe winmm_backend_fixture
 )
 
 add_test(
@@ -160,7 +160,6 @@ add_test(
   COMMAND winmm_session_tests
     $<TARGET_FILE:winmm_session_probe>
     $<TARGET_FILE:winmm_backend_fixture>
-    $<TARGET_FILE:managed_process_test_child>
 )
 
 add_executable(network_stack_census_tests network_stack_census_tests.cpp)

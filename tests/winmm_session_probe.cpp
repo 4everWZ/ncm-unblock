@@ -1,8 +1,8 @@
-// Host for the session-owned sidecar experiment.
+// Host for the production session bootstrap experiment.
 //
 // The checks run in a dedicated process so package configuration is read from a
 // staged directory and so terminating this process is terminating the exact
-// NCM-session stand-in that owns the sidecar job.
+// NCM-session stand-in being terminated.
 
 #include "ncm/winmm_proxy/session.hpp"
 
@@ -29,10 +29,8 @@ namespace {
       return "configuration_invalid";
     case ncm::winmm_proxy::session_result::disabled:
       return "disabled";
-    case ncm::winmm_proxy::session_result::sidecar_ready:
-      return "sidecar_ready";
-    case ncm::winmm_proxy::session_result::sidecar_failed:
-      return "sidecar_failed";
+    case ncm::winmm_proxy::session_result::injection_pending:
+      return "injection_pending";
   }
   return "unknown";
 }
@@ -40,11 +38,8 @@ namespace {
 void write_report(const wchar_t* path) {
   char line[256]{};
   const int written = sprintf_s(
-      line, "result=%s pid=%lu http=%u https=%u owner=%lu",
+      line, "result=%s owner=%lu",
       result_name(ncm::winmm_proxy::current_session_result()),
-      ncm::winmm_proxy::session_sidecar_process_id(),
-      static_cast<unsigned>(ncm::winmm_proxy::session_sidecar_http_port()),
-      static_cast<unsigned>(ncm::winmm_proxy::session_sidecar_https_port()),
       GetCurrentProcessId());
   if (written <= 0) {
     return;

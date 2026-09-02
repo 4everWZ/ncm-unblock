@@ -14,8 +14,10 @@ namespace ncm::config {
 // DLL, which is also the portable data directory for the first deliverable.
 inline constexpr wchar_t settings_file_name[] = L"ncm_unblock.ini";
 
-// Values the bootstrap needs before it can start and own a sidecar. Ports are
-// empty when the file asks for automatic selection, which is the default.
+// The global enable switch plus values retained for the gated sidecar fallback.
+// Ports are empty when that fallback asks for automatic selection, which is
+// the default. The production bootstrap parses these values but does not act on
+// the fallback fields while the in-process path is selected.
 struct settings {
   bool enabled{true};
   std::filesystem::path sidecar_executable;

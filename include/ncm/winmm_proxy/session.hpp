@@ -22,12 +22,9 @@ enum class session_result {
   configuration_invalid,
   // The verified session read a configuration that turns the feature off.
   disabled,
-  // Configuration was applied and a sidecar is owned by this process. Routing
-  // is the next milestone and is not installed yet.
-  sidecar_ready,
-  // Configuration was applied but the sidecar could not be started. Forwarding
-  // continues; routing is not installed.
-  sidecar_failed,
+  // The host surface and configuration permit the primary in-process path.
+  // M3 installs injection after reaching this state.
+  injection_pending,
 };
 
 // Bootstrap body. Resolves the backend off the loader lock and verifies that
@@ -37,14 +34,7 @@ void prepare_session() noexcept;
 [[nodiscard]] session_result current_session_result() noexcept;
 
 // Configuration the session applied. Meaningful once the session result is
-// `disabled`, `sidecar_ready`, or `sidecar_failed`; before that it holds this
-// build's defaults.
+// `disabled` or `injection_pending`; before that it holds this build's defaults.
 [[nodiscard]] const config::settings& session_settings() noexcept;
-
-// Sidecar identity after `sidecar_ready`. Zero when the session does not own a
-// ready sidecar.
-[[nodiscard]] unsigned long session_sidecar_process_id() noexcept;
-[[nodiscard]] unsigned short session_sidecar_http_port() noexcept;
-[[nodiscard]] unsigned short session_sidecar_https_port() noexcept;
 
 }  // namespace ncm::winmm_proxy
