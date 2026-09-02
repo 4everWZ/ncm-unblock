@@ -3,3 +3,5 @@ tmp/
 /out/
 /.vs/
 CMakeUserPresets.json
+.claude/
+claude.md
