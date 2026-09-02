@@ -67,4 +67,18 @@ Attribute playback traffic to a network stack by staging the census build of the
   -ObservationSeconds 600
 ```
 
-The census proxy forwards the same pinned surface as the release proxy and only differs in the bootstrap body it schedules. Every isolated process writes a module-load timeline tagged with its process role, recording allowlisted module names and fixed classifications only — never paths, request targets, headers, or credentials. It routes nothing. The run holds for the whole window so an operator can sign in and play one normal track and one greyed-out track; the discriminator is a network stack that maps lazily in the root process just before the first `audio_render` load.
+The census proxy forwards the same pinned surface as the release proxy and only differs in the bootstrap body it schedules. Every isolated process writes a module-load timeline tagged with its process role, recording allowlisted module names and fixed classifications only — never paths, request targets, headers, or credentials. It routes nothing. The run holds for the whole window so an operator can sign in and play one normal track and one greyed-out track.
+
+Against the real 2.9.7 client this returns no attribution: every candidate stack is mapped in the root process within the first 1.25 seconds, the `audio_render` loads are startup device initialization rather than first playback, and playback adds no further load. The census is retained as the module inventory it does establish, not as a discriminator.
+
+Attribute traffic to a stack with the process-local environment-proxy differential instead:
+
+```powershell
+./tools/probe-ncm-env-proxy.ps1
+```
+
+The isolated client is started with `http_proxy`, `https_proxy`, and `all_proxy` pointed at the loopback observer and `no_proxy` removed, all on that process only; no system, per-user, or client-persisted proxy setting is touched. The opening `-StartupSeconds` window is reserved for startup and sign-in, whose traffic is recorded as `phase=startup` and can never end the run. After it, the operator plays tracks and the run stops by itself once traffic settles following a track change, so nothing has to be timed by hand. Track changes are detected from the root window title, and only the transition is recorded — never the title. Reports carry the observer's fixed classifications only.
+
+The observer rejects every request, so a client that cannot load content is itself the positive result. Runs also end on the operator quitting the client, on a `stop` file in the output directory, on an event cap that a retrying client cannot outlast, and on `-ObservationSeconds` as a ceiling.
+
+Both client experiments share [the isolation harness](tools/lib/isolated-client.ps1), so exact-version and signature pinning, the private copy, the `localdata` fingerprint and verified restore, and reclaim limited to images under the private run directory have one implementation.
