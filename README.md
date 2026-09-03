@@ -18,12 +18,15 @@ From PowerShell on Windows with Visual Studio 2022 Build Tools, CMake, and Ninja
 
 The script discovers the Visual Studio installation, activates its Win32 toolchain, configures an out-of-source build, compiles, and runs focused tests. Use `-Configuration Release` for a release build.
 
-## Run
+## First use
 
-1. Build Release, then copy `ncm-unblock.ini.example` beside `build/win32-release/src/launcher/ncm-unblock.exe` as `ncm-unblock.ini`.
-2. Set `[ncm] path` to the signed x86 NCM 2.9.7.199711 executable and `[unm] path` to the upstream standalone UNM executable. Relative paths are resolved from the launcher directory.
-3. In NCM, set **Settings → Tools → HTTP proxy → Custom proxy** to `127.0.0.1` and the configured `http_port` once.
-4. Exit NCM completely from its tray icon, then run `ncm-unblock.exe`.
+1. Extract the release ZIP to a permanent directory.
+2. Double-click `setup.cmd` and accept the Windows administrator prompt. Setup detects the signed NCM 2.9.7.199711 installation, downloads the pinned official UNM v0.28.0 executable, writes the NCM path, and redirects the existing NCM desktop and Start menu shortcuts to the launcher while retaining the NCM icon.
+3. In NCM, set **Settings → Tools → HTTP proxy → Custom proxy** to `127.0.0.1` and port `3412` once.
+
+Afterward, start NCM from its normal desktop or Start menu shortcut. Keep the extracted directory in place because the shortcut targets its `ncm-unblock.exe`. To undo shortcut changes, run `restore-shortcuts.cmd`; the first setup preserves each replaced shortcut and repeated setup runs do not overwrite those backups.
+
+For a manual or development setup, place the official UNM executable at `core/unblockneteasemusic-win-x64.exe`, edit `ncm-unblock.ini`, and run `ncm-unblock.exe` directly.
 
 The launcher starts UNM hidden, waits for both fixed loopback listeners and a valid PAC response, then starts NCM. Closing the NCM window to the tray keeps UNM alive; choosing NCM's tray **Exit** stops UNM and the launcher. With logging enabled, diagnostics are appended under `logs/` beside the launcher. Leave `sources` empty unless intentionally overriding the pinned UNM release defaults.
 
@@ -35,7 +38,7 @@ Create the verified portable ZIP with:
 ./tools/package.ps1
 ```
 
-The archive is written under `out/` and intentionally does not redistribute UNM. Follow `core/README.txt` in the package to download the official v0.28.0 Windows x64 standalone executable. No separate Node installation is required because that upstream executable contains its own runtime.
+The archive is written under `out/` and intentionally does not redistribute UNM. `setup.cmd` downloads the pinned official v0.28.0 Windows x64 standalone executable directly from its GitHub release; `core/README.txt` documents the manual fallback. No separate Node installation is required because that upstream executable contains its own runtime.
 
 Inspect the local NCM executable without changing it:
 

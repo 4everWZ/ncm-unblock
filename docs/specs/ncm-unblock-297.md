@@ -3,8 +3,8 @@
 ## Intent
 
 - **Product:** A portable, lightweight native Win32 launcher for NetEase Cloud Music (NCM) 2.9.7.199711. It starts an upstream UnblockNeteaseMusic (UNM) standalone executable, waits until the proxy is ready, starts NCM, and stops UNM after the complete NCM session exits.
-- **MVP user experience:** The user configures NCM's built-in custom HTTP proxy once, then launches NCM through `ncm-unblock.exe`. The launcher and sidecar have no visible console during normal use and leave no resident service or orphan process.
-- **In scope:** C++20/Win32 launcher and configuration; fixed loopback ports; sidecar process ownership, readiness, logging, and cleanup; NCM start and session-end detection; portable packaging; compatibility, recovery, and performance evidence.
+- **MVP user experience:** One portable setup run detects NCM, downloads the pinned upstream sidecar, prepares configuration, and redirects the user's existing NCM shortcuts to the launcher with reversible backups. The user configures NCM's built-in custom HTTP proxy once and then uses the normal NCM shortcut. The launcher and sidecar have no visible console during normal use and leave no resident service or orphan process.
+- **In scope:** C++20/Win32 launcher and configuration; fixed loopback ports; sidecar process ownership, readiness, logging, and cleanup; NCM start and session-end detection; portable packaging and setup; reversible shortcut integration; compatibility, recovery, and performance evidence.
 - **Out of scope:** DLL proxy deployment, code injection, CEF/V8 hooks, IAT or inline patching, a native provider matcher, frontend reverse engineering, direct modification of NCM `localdata`, system proxy changes, certificate installation, a Windows service, automatic NCM restart, and a settings GUI.
 
 UNM remains the business core for privilege and player-URL handling and alternate-source matching. The launcher does not reimplement provider APIs. Prior injection research is preserved on `research/native-injection` and is not part of the production build.
@@ -43,7 +43,9 @@ write_log = true
 
 ### First-time NCM setup
 
-The user configures NCM 2.9.7 through its supported UI at **Settings → Tools → HTTP proxy → Custom proxy**, using `127.0.0.1` and the configured HTTP port. The launcher does not automate or bypass this settings UI in the MVP.
+The package setup detects only a valid signed NCM 2.9.7.199711 target, obtains the pinned official UNM v0.28.0 Windows x64 asset from its fixed upstream release URL, verifies its expected published asset size, and writes the target path into the portable configuration. It redirects matching desktop and Start menu shortcuts to the colocated launcher while retaining the NCM icon. Original shortcut files are backed up before mutation, repeat runs preserve the first backups, and the packaged restore command restores or removes every managed shortcut. Setup may request elevation only because machine-wide NCM shortcuts are administrator-owned.
+
+The user then configures NCM through its supported UI at **Settings → Tools → HTTP proxy → Custom proxy**, using `127.0.0.1` and the configured HTTP port. Setup and the launcher do not automate or bypass this settings UI.
 
 ### Launch sequence
 
@@ -72,8 +74,8 @@ The user configures NCM 2.9.7 through its supported UI at **Settings → Tools �
 
 ### Packaging
 
-- The first release is portable and contains the launcher, editable configuration, documentation, and a `core/` placement notice. It does not redistribute UNM: the user downloads the independently replaceable official v0.28.0 Windows x64 standalone into `core/`. This avoids conveying its bundled Node runtime and npm dependency set without a complete corresponding-source and third-party-notice package.
-- An installer and shortcut replacement are post-MVP. Any later shortcut may target `ncm-unblock.exe` while using the NCM icon and must support reversible uninstall/restoration.
+- The first release is portable and contains the launcher, editable configuration, setup and restoration commands, documentation, and a `core/` placement notice. It does not redistribute UNM: setup downloads the independently replaceable official v0.28.0 Windows x64 standalone into `core/` from the fixed official release URL. This avoids conveying its bundled Node runtime and npm dependency set without a complete corresponding-source and third-party-notice package.
+- The portable setup edits only matching NCM shortcuts or creates clearly labeled per-user shortcuts when no match exists. It does not install a service or copy the product into a system directory. Users must extract the package to its permanent location before setup.
 
 ## Acceptance
 
@@ -86,11 +88,12 @@ The user configures NCM 2.9.7 through its supported UI at **Settings → Tools �
 | NCM or UNM crashes, bad configuration, and port collision fail boundedly without a sidecar orphan; launcher failure reclaims its UNM tree without terminating NCM or unrelated processes | Failure-recovery integration matrix |
 | Unrelated processes, system proxy, certificate trust, NCM installation, and private `localdata` remain unchanged | Negative process tests and bounded before/after inspection |
 | Release contents require no separate Node installation, service, injected DLL, or development tree | Packaging manifest inspection |
+| One setup run prepares the portable package and normal NCM shortcuts; repeated setup is idempotent and restoration recovers replaced shortcuts | Isolated setup/restore test using temporary package and shortcut paths |
 | CPU, startup latency, RSS, private bytes, and commit are measured comparably for NCM alone and NCM plus launcher/UNM | Documented performance baseline |
 
 ## Deferred decisions
 
 - Minimum supported Windows version and nested-job behavior.
 - Whether a bounded single UNM restart is useful after the MVP; unlimited restart is not allowed.
-- Installer and shortcut integration after the portable MVP is stable.
+- A conventional installed-product experience with a system uninstaller; the portable setup remains movable only before shortcut integration.
 - A lighter native core only if measured resource use, rather than preference, justifies it after the MVP.

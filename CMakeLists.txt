@@ -47,3 +47,11 @@ install(
   DESTINATION core
   COMPONENT Runtime
 )
+install(
+  FILES
+    packaging/setup.cmd
+    packaging/setup.ps1
+    packaging/restore-shortcuts.cmd
+  DESTINATION .
+  COMPONENT Runtime
+)

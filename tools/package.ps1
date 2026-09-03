@@ -43,7 +43,10 @@ $expectedFiles = @(
     'core/README.txt',
     'ncm-unblock.exe',
     'ncm-unblock.ini',
-    'README.md'
+    'README.md',
+    'restore-shortcuts.cmd',
+    'setup.cmd',
+    'setup.ps1'
 ) | Sort-Object
 $actualFiles = @(Get-ChildItem -LiteralPath $stage -File -Recurse | ForEach-Object {
         [IO.Path]::GetRelativePath($stage, $_.FullName).Replace('\', '/')
