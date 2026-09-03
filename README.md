@@ -20,7 +20,7 @@ The script discovers the Visual Studio installation, activates its Win32 toolcha
 
 ## First use
 
-1. Extract the release ZIP to a permanent directory.
+1. Exit NCM completely from its tray icon, then extract the release ZIP to a permanent directory.
 2. Double-click `setup.cmd` and accept the Windows administrator prompt. Setup detects the signed NCM 2.9.7.199711 installation, downloads the pinned official UNM v0.28.0 executable, writes the NCM path, and redirects the existing NCM desktop and Start menu shortcuts to the launcher while retaining the NCM icon.
 3. In NCM, set **Settings → Tools → HTTP proxy → Custom proxy** to `127.0.0.1` and port `3412` once.
 
