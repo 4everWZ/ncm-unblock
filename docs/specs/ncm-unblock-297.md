@@ -2,66 +2,96 @@
 
 ## Intent
 
-- **Intended outcome:** A portable, native-first Windows launcher that makes an upstream UnblockNeteaseMusic (UNM) core available to NetEase Cloud Music (NCM) 2.9.7 only for the lifetime of that client.
-- **In scope for the MVP:** NCM 2.9.7.199711 on Windows; a native launcher; a replaceable upstream UNM Windows executable; loopback-only proxying; readiness, startup, and cleanup handling; a small file-based configuration; and reproducible compatibility and performance evidence.
-- **Out of scope for the MVP:** An embedded settings UI, Windows service, resident injector, system-wide hook, AppInit DLL, modified UNM source, native reimplementation of UNM, automatic certificate installation, support for other NCM versions, and a final DLL proxy or selective-routing design before investigation evidence supports one.
+- **Product:** A portable, lightweight native Win32 launcher for NetEase Cloud Music (NCM) 2.9.7.199711. It starts an upstream UnblockNeteaseMusic (UNM) standalone executable, waits until the proxy is ready, starts NCM, and stops UNM after the complete NCM session exits.
+- **MVP user experience:** The user configures NCM's built-in custom HTTP proxy once, then launches NCM through `ncm-unblock.exe`. The launcher and sidecar have no visible console during normal use and leave no resident service or orphan process.
+- **In scope:** C++20/Win32 launcher and configuration; fixed loopback ports; sidecar process ownership, readiness, logging, and cleanup; NCM start and session-end detection; portable packaging; compatibility, recovery, and performance evidence.
+- **Out of scope:** DLL proxy deployment, code injection, CEF/V8 hooks, IAT or inline patching, a native provider matcher, frontend reverse engineering, direct modification of NCM `localdata`, system proxy changes, certificate installation, a Windows service, automatic NCM restart, and a settings GUI.
 
-## Contract
+UNM remains the business core for privilege and player-URL handling and alternate-source matching. The launcher does not reimplement provider APIs. Prior injection research is preserved on `research/native-injection` and is not part of the production build.
 
-### Runtime boundary
+## Runtime contract
 
-- Release-owned runtime code is native C++20. Node does not enter `cloudmusic.exe`.
-- The UNM core is an independently replaceable sidecar executable. A release does not ship a separate `node.exe`, Node package manager, `node_modules`, upstream source checkout, or development cache. An upstream standalone executable may contain its own implementation runtime.
-- Select a standalone sidecar for the Windows operating-system architecture, not for the x86 architecture of `cloudmusic.exe`. Unsupported OS architectures fail before launch.
-- The sidecar binds only to loopback. The launcher must not expose an unauthenticated general-purpose proxy on a LAN or public interface.
-- The selected sidecar must run in its restricted/strict mode. For a sidecar that redirects HTTPS `CONNECT`, the launcher manages distinct HTTP and HTTPS loopback ports.
-- The launcher owns each sidecar process it starts and must arrange bounded cleanup when NCM exits, startup fails, or the launcher terminates. It must not terminate an unrelated pre-existing NCM or UNM process.
-- Idle lifecycle handling is event-driven; polling loops are not part of the target design.
+### Components and boundaries
 
-### MVP launch behavior
+- Release-owned code is native C++20, built with CMake and Visual Studio for Win32.
+- Normal runtime consists of `ncm-unblock.exe`, `cloudmusic.exe` and its own child processes, and one independently replaceable UNM standalone executable.
+- A standalone UNM executable may contain its own Node runtime. The product does not install or ship a separate Node toolchain, package manager, `node_modules`, or upstream checkout, and Node never runs inside `cloudmusic.exe`.
+- The launcher changes neither system proxy nor certificate trust. It does not decode, log, or edit `%LOCALAPPDATA%\Netease\CloudMusic\localdata`.
 
-1. Resolve and validate the configured NCM 2.9.7 executable and UNM core.
-2. Acquire exclusive loopback leases for an available HTTP/HTTPS port pair, honoring explicitly configured fixed ports only when both can be bound safely. Because the unmodified sidecar cannot accept inherited listener sockets, this is a bounded handoff rather than an atomic socket transfer: keep both leases until the suspended sidecar is owned by its private job, then release them immediately before resume. In automatic mode, a handoff collision retries the whole pair-selection/start attempt within a fixed budget; a configured fixed pair fails without silently changing ports.
-3. Start the sidecar with explicit loopback binding and restricted proxy arguments. Readiness requires a live managed tree, both loopback listeners owned by processes in that private job, and a successful local PAC response where supported; it is not provider or playback health.
-4. Start or attach to NCM only according to behavior established by the compatibility investigation; do not silently change system-wide proxy or certificate state.
-5. Keep the sidecar alive while the launcher-owned NCM lifetime is active.
-6. Stop the sidecar and report actionable failure information when the managed lifetime ends.
+### Configuration
 
-The exact NCM proxy-setting mechanism, existing-instance behavior, multi-process exit condition, and end-to-end health check remain investigation outputs and are not guessed by this specification.
+The portable configuration is human-readable and stored beside the launcher. It provides at least:
 
-### Configuration and packaging
+```ini
+[ncm]
+path = C:\Program Files (x86)\Netease\CloudMusic\cloudmusic.exe
 
-- Configuration is a human-readable file stored beside the launcher or in its portable data directory. Registry and database storage are excluded from the MVP.
-- Configuration must distinguish automatic port selection from an explicit fixed port. Source ordering and quality options are passed through only after they are verified against the pinned sidecar interface.
-- Downloaded binaries, user configuration, certificates, and runtime logs are not source-controlled.
-- Third-party redistribution requires recorded upstream identity, version, license, architecture, runtime interface, corresponding-source path, required notices, and redistribution terms before an artifact enters a release.
-- Publicly shared upstream private keys or expired leaf certificates are not accepted as the product trust design. If HTTPS interception proves necessary, certificate generation, storage, narrowly scoped trust, renewal, removal, and failure recovery require a separate accepted design and explicit user authorization before trust-store mutation.
+[unm]
+path = core\unblockneteasemusic.exe
+http_port = 3412
+https_port = 3413
+sources = kuwo
 
-### Evolution gates
+[launcher]
+show_console = false
+write_log = true
+```
 
-- Compatibility of NCM 2.9.7 through a localhost UNM proxy is a go/no-go gate for the launcher MVP.
-- DLL proxying, suspended-process injection, inline hooks, and selective proxying require separate evidence after the launcher path works. MinHook is not a dependency until an accepted design requires inline hooking.
-- Performance budgets are set from a documented baseline rather than from the provisional numbers in input material.
+- HTTP and HTTPS ports are explicit and stable so NCM's saved proxy setting does not change between runs. The launcher fails clearly if either configured port is unavailable; it does not silently select another port.
+- Source names are passed to UNM in configured order. The launcher does not interpret provider APIs.
+- Injection-only CEF, WinMM, shim, frontend, and matcher settings are invalid for the production configuration.
+
+### First-time NCM setup
+
+The user configures NCM 2.9.7 through its supported UI at **Settings → Tools → HTTP proxy → Custom proxy**, using `127.0.0.1` and the configured HTTP port. The launcher does not automate or bypass this settings UI in the MVP.
+
+### Launch sequence
+
+1. Validate the configuration, exact NCM executable/version, UNM executable, configured ports, and relevant existing processes.
+2. If a matching NCM session is already running for the current user and target installation, fail with an instruction to exit NCM completely. The MVP does not attach to an existing session.
+3. Reserve both configured ports exclusively on `127.0.0.1`.
+4. Prepare UNM suspended, assign it to a private Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, redirect stdout/stderr to `logs/unm.log`, release the port leases immediately before resume, and start it without a visible window.
+5. Invoke the pinned UNM interface with explicit loopback binding, the configured HTTP/HTTPS pair, restricted mode, and configured sources; the expected shape is `-a 127.0.0.1 -p HTTP:HTTPS -s -o SOURCES`.
+6. Declare readiness only while the managed UNM tree remains alive, both configured listeners are owned by processes in its private job, and `/proxy.pac` returns a complete valid response. Readiness is proxy initialization, not provider or playback health.
+7. Start `cloudmusic.exe` normally with `CreateProcessW`. Do not inject, suspend NCM, or add ambient proxy flags; NCM uses its saved custom-proxy setting.
+
+### Ownership and session end
+
+- The launcher records the target executable path, root PID, and start time. It identifies a session by process identity and target path, never by image name alone.
+- Closing the main window to the tray is not session end. The sidecar remains alive while any process belonging to the launched target NCM session remains.
+- The MVP may use process handles, waitable events, and a low-frequency bounded process census (approximately every one to two seconds) where NCM's multi-process behavior requires it. High-frequency polling is excluded.
+- When the complete NCM session ends or NCM crashes with no session process remaining, the launcher requests bounded graceful UNM shutdown where supported, terminates the private job if needed, verifies the tree is empty and ports are released, then exits. It does not restart NCM.
+- If UNM exits unexpectedly, the launcher reports the failure and shuts down cleanly. The MVP does not use an unbounded restart loop.
+- Closing or crashing the launcher closes the kill-on-close job so its UNM process tree cannot remain resident. Cleanup is limited to launcher-owned processes; pre-existing or merely same-named processes are never terminated.
+
+### Logging and privacy
+
+- Normal logs are limited to `launcher.log` and redirected `unm.log`.
+- Launcher records timestamps, launcher/NCM/UNM versions, startup and readiness results, owned PIDs, session end, and exit codes.
+- Logs exclude credentials, cookies, headers, complete private requests, and decoded NCM user state.
+
+### Packaging
+
+- The first release is portable: launcher, configuration, documentation, and an optional `core/` artifact whose upstream identity, pinned version, license, corresponding-source obligations, architecture, runtime interface, and redistribution terms have been verified.
+- An installer and shortcut replacement are post-MVP. Any later shortcut may target `ncm-unblock.exe` while using the NCM icon and must support reversible uninstall/restoration.
 
 ## Acceptance
 
 | Observable requirement | Verification method |
 |---|---|
-| The target is the signed NCM 2.9.7.199711 x86 executable | Repeatable PE metadata inspection and Authenticode status recorded in the runtime report |
-| The NCM-to-local-UNM path supports normal and unavailable tracks, search, play, and track changes | Versioned compatibility matrix using a pinned UNM executable and documented NCM configuration |
-| A launcher-owned sidecar becomes ready before NCM routing begins | Focused integration test covering success, timeout, early exit, and port collision |
-| The sidecar is reclaimed after normal NCM exit, NCM startup failure, launcher termination, and sidecar failure | Process-lifecycle integration tests that distinguish root exit from private-job tree completion |
-| The launcher does not terminate unrelated existing processes or expose the proxy outside loopback | Negative integration tests and socket ownership/address inspection |
-| Normal operation leaves system proxy and certificate state unchanged unless a separately authorized trust workflow is active | Before/after state comparison and uninstall/recovery test |
-| Release contents are portable and omit separate Node development/runtime tooling and generated development data | Packaging manifest inspection |
-| Performance claims use defined versions, sampling windows, and comparable scenarios | Baseline report for NCM alone, standalone UNM, and the launcher-managed path |
+| Invalid paths, wrong NCM version, occupied fixed ports, and an existing NCM session fail before mutation | Focused configuration and launch-preflight tests |
+| UNM is job-owned, hidden, logged, and ready before NCM starts | Integration tests for listener ownership, PAC response, timeout, early exit, and log redirection |
+| A configured NCM 2.9.7 session can search and play normal and UNM-supported unavailable tracks | Versioned compatibility run using the supported NCM proxy UI and pinned UNM artifact |
+| Closing NCM to the tray keeps UNM alive; choosing NCM's real exit ends UNM and the launcher | Exact-client lifecycle run with path/PID evidence |
+| NCM, UNM, or launcher crashes, bad configuration, and port collision leave no launcher-owned orphan | Failure-recovery integration matrix |
+| Unrelated processes, system proxy, certificate trust, NCM installation, and private `localdata` remain unchanged | Negative process tests and bounded before/after inspection |
+| Release contents require no separate Node installation, service, injected DLL, or development tree | Packaging manifest inspection |
+| CPU, startup latency, RSS, private bytes, and commit are measured comparably for NCM alone and NCM plus launcher/UNM | Documented performance baseline |
 
-## Open decisions
+## Deferred decisions
 
-- Which NCM-supported proxy configuration is reliable for 2.9.7 HTTP and HTTPS traffic without system-wide changes?
-- What minimum Windows version is supported, including nested-job behavior when the launcher itself already runs inside a job?
-- Is upstream UNM v0.28.0 acceptable after resolving its expired bundled leaf certificate, third-party notices, artifact authenticity, and target-version compatibility?
-- If HTTPS interception is required, can it be implemented with an acceptable per-user certificate lifecycle, or must the routing design change?
-- How should the launcher behave when an NCM 2.9.7 instance already exists?
-- Which process set defines the end of an NCM session?
-- After the MVP, does measured evidence justify a DLL proxy, injection, selective routing, or no injected component at all?
+- Minimum supported Windows version and nested-job behavior.
+- Whether the verified UNM artifact can be redistributed or must be downloaded separately.
+- Whether a bounded single UNM restart is useful after the MVP; unlimited restart is not allowed.
+- Installer and shortcut integration after the portable MVP is stable.
+- A lighter native core only if measured resource use, rather than preference, justifies it after the MVP.

@@ -1,8 +1,10 @@
 # ncm-unblock-297
 
-A native-first Windows integration for running an upstream UnblockNeteaseMusic core only while NetEase Cloud Music 2.9.7 is in use.
+A lightweight native Win32 launcher that runs an upstream UnblockNeteaseMusic (UNM) standalone executable only while NetEase Cloud Music 2.9.7.199711 is in use.
 
-The project is in the investigation and bootstrap stage. The current product contract is in [the canonical specification](docs/specs/ncm-unblock-297.md), and resumable work is tracked in [the current work plan](docs/plans/ncm-unblock-297.md).
+The production direction is a portable launcher plus a loopback UNM sidecar. DLL proxying, CEF/V8 hooks, and in-process matching are not part of the production runtime; that work is preserved on the `research/native-injection` branch.
+
+The current product contract is in [the canonical specification](docs/specs/ncm-unblock-297.md), and resumable work is tracked in [the current work plan](docs/plans/ncm-unblock-297.md).
 
 Material under `tmp/` is intentionally ignored and is not an implementation contract.
 
