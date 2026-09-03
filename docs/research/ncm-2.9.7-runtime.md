@@ -81,12 +81,8 @@ HTTPS is currently blocked at the trust-design level. The upstream [CONNECT path
 
 The project declares `LGPL-3.0-only` in its [package metadata](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/package.json) and distributes [GPLv3](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/COPYING) and [LGPLv3](https://github.com/UnblockNeteaseMusic/server/blob/v0.28.0/COPYING.LESSER) texts. Before redistribution, this repository still needs a corresponding-source route plus a license/notice audit for the embedded Node runtime and bundled dependencies. No upstream executable was downloaded, executed, or approved for redistribution in this checkpoint.
 
-## Remaining M0 experiments
+## Sidecar outcome
 
-1. Identify how 2.9.7 persists its client-local proxy state and prove an exact read/write/rollback cycle without copying private values into the repository.
-2. Route a controlled, non-sensitive request through the validated loopback observer to distinguish whether 2.9.7 honors its HTTP proxy for HTTPS destinations and whether it uses CONNECT.
-3. Repeat connection ownership snapshots around search, normal-track play, unavailable-track play, and track changes; use stack-specific tracing only if ownership remains ambiguous.
-4. Inspect loader candidates for search order and complete export forwarding in an isolated copy, not the installed client directory.
-5. Pin an upstream UNM Windows artifact only after verifying authenticity, target compatibility, certificate lifecycle, corresponding source, and bundled dependency notices in addition to its already-audited source, version, architecture, CLI, and initialization behavior.
+The HTTP-proxy launcher compatibility decision is positive for the exact local NCM 2.9.7.199711 and official UNM v0.28.0 pair. Bounded runs using the supported client proxy UI and upstream-default providers passed search, normal and unavailable tracks beyond 20 seconds, consecutive track changes, automatic playlist advance, and pause/resume. The explicit non-default Kuwo-only run remains rejected because every tested audio item ended after approximately 11 seconds. Each accepted run restored the private client snapshot and system-proxy state and left no NCM, UNM, or listener residue.
 
-The launcher compatibility go/no-go remains open until the NCM-to-loopback-UNM matrix covers search, normal tracks, unavailable tracks, play, and track changes.
+The production contract and unfinished release work are owned by the canonical specification and current plan. Prior persistence, observer-routing, and loader experiments are no longer production tasks. Packaging still requires authoritative artifact, license, redistribution, corresponding-source, bundled-dependency notice, and certificate-lifecycle resolution; this result does not establish HTTPS certificate trust or future provider availability.
