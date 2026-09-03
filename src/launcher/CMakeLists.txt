@@ -29,4 +29,4 @@ target_link_libraries(
     ncm_project_options
 )
 
-install(TARGETS ncm-unblock RUNTIME DESTINATION .)
+install(TARGETS ncm-unblock RUNTIME DESTINATION . COMPONENT Runtime)

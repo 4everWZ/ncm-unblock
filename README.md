@@ -27,6 +27,16 @@ The script discovers the Visual Studio installation, activates its Win32 toolcha
 
 The launcher starts UNM hidden, waits for both fixed loopback listeners and a valid PAC response, then starts NCM. Closing the NCM window to the tray keeps UNM alive; choosing NCM's tray **Exit** stops UNM and the launcher. With logging enabled, diagnostics are appended under `logs/` beside the launcher. Leave `sources` empty unless intentionally overriding the pinned UNM release defaults.
 
+## Package
+
+Create the verified portable ZIP with:
+
+```powershell
+./tools/package.ps1
+```
+
+The archive is written under `out/` and intentionally does not redistribute UNM. Follow `core/README.txt` in the package to download the official v0.28.0 Windows x64 standalone executable. No separate Node installation is required because that upstream executable contains its own runtime.
+
 Inspect the local NCM executable without changing it:
 
 ```powershell

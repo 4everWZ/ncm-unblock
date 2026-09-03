@@ -72,7 +72,7 @@ The user configures NCM 2.9.7 through its supported UI at **Settings â†’ Tools â
 
 ### Packaging
 
-- The first release is portable: launcher, configuration, documentation, and an optional `core/` artifact whose upstream identity, pinned version, license, corresponding-source obligations, architecture, runtime interface, and redistribution terms have been verified.
+- The first release is portable and contains the launcher, editable configuration, documentation, and a `core/` placement notice. It does not redistribute UNM: the user downloads the independently replaceable official v0.28.0 Windows x64 standalone into `core/`. This avoids conveying its bundled Node runtime and npm dependency set without a complete corresponding-source and third-party-notice package.
 - An installer and shortcut replacement are post-MVP. Any later shortcut may target `ncm-unblock.exe` while using the NCM icon and must support reversible uninstall/restoration.
 
 ## Acceptance
@@ -91,7 +91,6 @@ The user configures NCM 2.9.7 through its supported UI at **Settings â†’ Tools â
 ## Deferred decisions
 
 - Minimum supported Windows version and nested-job behavior.
-- Whether the verified UNM artifact can be redistributed or must be downloaded separately.
 - Whether a bounded single UNM restart is useful after the MVP; unlimited restart is not allowed.
 - Installer and shortcut integration after the portable MVP is stable.
 - A lighter native core only if measured resource use, rather than preference, justifies it after the MVP.

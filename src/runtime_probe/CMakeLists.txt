@@ -15,4 +15,4 @@ target_include_directories(ncm_runtime_probe_lib
 add_executable(ncm_runtime_probe main.cpp)
 target_link_libraries(ncm_runtime_probe PRIVATE ncm_runtime_probe_lib ncm_project_options)
 
-install(TARGETS ncm_runtime_probe RUNTIME DESTINATION .)
+install(TARGETS ncm_runtime_probe RUNTIME DESTINATION . COMPONENT Tools)

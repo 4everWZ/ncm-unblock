@@ -34,3 +34,16 @@ add_subdirectory(src/launcher)
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
+
+install(FILES README.md DESTINATION . COMPONENT Runtime)
+install(
+  FILES ncm-unblock.ini.example
+  DESTINATION .
+  RENAME ncm-unblock.ini
+  COMPONENT Runtime
+)
+install(
+  FILES packaging/core/README.txt
+  DESTINATION core
+  COMPONENT Runtime
+)
