@@ -148,6 +148,84 @@ void test_job_close_reclaims_tree(const std::filesystem::path& child) {
           "closing the job did not reclaim the process tree");
 }
 
+void test_owner_termination_reclaims_tree(
+    const std::filesystem::path& child,
+    const std::filesystem::path& owner) {
+  const auto marker = std::filesystem::temp_directory_path() /
+      (L"ncm-managed-owner-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+       std::to_wstring(GetTickCount64()) + L".tmp");
+  std::filesystem::remove(marker);
+  auto command_line = L"\"" + owner.wstring() + L"\" \"" + child.wstring() +
+      L"\" \"" + marker.wstring() + L"\"";
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process{};
+  require(CreateProcessW(
+              owner.c_str(), command_line.data(), nullptr, nullptr, FALSE, 0,
+              nullptr, owner.parent_path().c_str(), &startup, &process) != FALSE,
+          "unable to start managed-process owner fixture");
+  CloseHandle(process.hThread);
+
+  HANDLE managed_observation{};
+  HANDLE descendant_observation{};
+  try {
+    const auto deadline = GetTickCount64() + 5000;
+    std::uint32_t managed_id{};
+    do {
+      std::ifstream stream(marker, std::ios::binary);
+      stream >> managed_id;
+      if (managed_id != 0) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    } while (GetTickCount64() < deadline);
+    require(managed_id != 0, "owner fixture did not publish its managed PID");
+    managed_observation = OpenProcess(
+        SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
+        FALSE, managed_id);
+    require(managed_observation != nullptr, "unable to observe owner-managed process");
+    std::optional<std::uint32_t> descendant_id;
+    const auto descendant_deadline = GetTickCount64() + 5000;
+    do {
+      descendant_id = find_child_process(managed_id);
+      if (descendant_id.has_value()) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    } while (GetTickCount64() < descendant_deadline);
+    require(descendant_id.has_value(), "owner-managed process did not create its child");
+    descendant_observation = OpenProcess(
+        SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
+        FALSE, *descendant_id);
+    require(descendant_observation != nullptr,
+            "unable to observe owner-managed descendant");
+    require(TerminateProcess(process.hProcess, 73) != FALSE,
+            "unable to terminate owner fixture");
+    require(WaitForSingleObject(process.hProcess, 5000) == WAIT_OBJECT_0,
+            "terminated owner did not exit within the deadline");
+    require(WaitForSingleObject(managed_observation, 5000) == WAIT_OBJECT_0,
+            "owner termination left its managed root running");
+    require(WaitForSingleObject(descendant_observation, 5000) == WAIT_OBJECT_0,
+            "owner termination left its managed descendant running");
+  } catch (...) {
+    TerminateProcess(process.hProcess, 125);
+    WaitForSingleObject(process.hProcess, 5000);
+    if (managed_observation != nullptr) {
+      TerminateProcess(managed_observation, 125);
+      WaitForSingleObject(managed_observation, 5000);
+      CloseHandle(managed_observation);
+    }
+    if (descendant_observation != nullptr) {
+      TerminateProcess(descendant_observation, 125);
+      WaitForSingleObject(descendant_observation, 5000);
+      CloseHandle(descendant_observation);
+    }
+    CloseHandle(process.hProcess);
+    std::filesystem::remove(marker);
+    throw;
+  }
+  CloseHandle(managed_observation);
+  CloseHandle(descendant_observation);
+  CloseHandle(process.hProcess);
+  std::filesystem::remove(marker);
+}
+
 void test_root_exit_does_not_imply_tree_exit(const std::filesystem::path& child) {
   auto process = ncm::launcher::managed_process::start(
       child_spec(child, {L"--spawn-child-and-exit"}));
@@ -255,8 +333,9 @@ void test_output_redirection(const std::filesystem::path& child) {
 
 int wmain(int argument_count, wchar_t** arguments) {
   try {
-    require(argument_count == 2, "test child path argument is missing");
+    require(argument_count == 3, "test fixture path arguments are missing");
     const std::filesystem::path child(arguments[1]);
+    const std::filesystem::path owner(arguments[2]);
     test_exit_code(child);
     test_argument_quoting(child);
     test_child_starts_inside_job(child);
@@ -264,6 +343,7 @@ int wmain(int argument_count, wchar_t** arguments) {
     test_job_close_reclaims_child(child);
     test_unresumed_process_is_reclaimed(child);
     test_job_close_reclaims_tree(child);
+    test_owner_termination_reclaims_tree(child, owner);
     test_root_exit_does_not_imply_tree_exit(child);
     test_job_close_leaves_unrelated_process(child);
     test_relative_path_rejected();

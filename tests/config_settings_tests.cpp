@@ -62,6 +62,15 @@ void test_invalid_configuration_is_rejected() {
   }
 }
 
+void test_missing_configuration_is_rejected() {
+  const auto missing = std::filesystem::temp_directory_path() /
+      L"ncm-config-directory-that-does-not-exist";
+  const auto result = ncm::config::load_settings(missing);
+  require(result.status == ncm::config::load_status::invalid,
+          "missing INI was accepted");
+  require(!result.diagnostic.empty(), "missing INI has no diagnostic");
+}
+
 }  // namespace
 
 int wmain() {
@@ -69,6 +78,7 @@ int wmain() {
     test_valid_configuration();
     test_upstream_defaults_are_preserved();
     test_invalid_configuration_is_rejected();
+    test_missing_configuration_is_rejected();
     std::cout << "configuration tests passed\n";
     return 0;
   } catch (const std::exception& error) {

@@ -62,7 +62,7 @@ The user configures NCM 2.9.7 through its supported UI at **Settings â†’ Tools â
 - The MVP may use process handles, waitable events, and a low-frequency bounded process census (approximately every one to two seconds) where NCM's multi-process behavior requires it. High-frequency polling is excluded.
 - When the complete NCM session ends or NCM crashes with no session process remaining, the launcher requests bounded graceful UNM shutdown where supported, terminates the private job if needed, verifies the tree is empty and ports are released, then exits. It does not restart NCM.
 - If UNM exits unexpectedly, the launcher reports the failure and shuts down cleanly. The MVP does not use an unbounded restart loop.
-- Closing or crashing the launcher closes the kill-on-close job so its UNM process tree cannot remain resident. Cleanup is limited to launcher-owned processes; pre-existing or merely same-named processes are never terminated.
+- Closing or crashing the launcher closes the kill-on-close job so its UNM process tree cannot remain resident. NCM remains outside that job and is not terminated merely because the launcher fails. Cleanup is limited to launcher-owned sidecar processes; pre-existing or merely same-named processes are never terminated.
 
 ### Logging and privacy
 
@@ -83,7 +83,7 @@ The user configures NCM 2.9.7 through its supported UI at **Settings â†’ Tools â
 | UNM is job-owned, hidden, logged, and ready before NCM starts | Integration tests for listener ownership, PAC response, timeout, early exit, and log redirection |
 | A configured NCM 2.9.7 session can search and play normal and UNM-supported unavailable tracks | Versioned compatibility run using the supported NCM proxy UI and pinned UNM artifact |
 | Closing NCM to the tray keeps UNM alive; choosing NCM's real exit ends UNM and the launcher | Exact-client lifecycle run with path/PID evidence |
-| NCM, UNM, or launcher crashes, bad configuration, and port collision leave no launcher-owned orphan | Failure-recovery integration matrix |
+| NCM or UNM crashes, bad configuration, and port collision fail boundedly without a sidecar orphan; launcher failure reclaims its UNM tree without terminating NCM or unrelated processes | Failure-recovery integration matrix |
 | Unrelated processes, system proxy, certificate trust, NCM installation, and private `localdata` remain unchanged | Negative process tests and bounded before/after inspection |
 | Release contents require no separate Node installation, service, injected DLL, or development tree | Packaging manifest inspection |
 | CPU, startup latency, RSS, private bytes, and commit are measured comparably for NCM alone and NCM plus launcher/UNM | Documented performance baseline |
