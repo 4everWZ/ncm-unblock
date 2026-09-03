@@ -34,14 +34,16 @@ int __cdecl cef_register_extension(
     handler->base.release(&handler->base);
   }
 
+  const std::wstring_view source(code->str, code->length);
   const auto valid =
       name != nullptr && code != nullptr && handler != nullptr &&
       handler->execute != nullptr &&
       std::wstring_view(name->str, name->length) == L"ncm/unblock/m3" &&
-      std::wstring_view(code->str, code->length).find(L"ncmUnblock297Marker") !=
-          std::wstring_view::npos &&
-      std::wstring_view(code->str, code->length).find(L"native function") !=
-          std::wstring_view::npos;
+      source.find(L"ncmUnblock297Marker") != std::wstring_view::npos &&
+      source.find(L"ncmUnblock297AnchorsFound") != std::wstring_view::npos &&
+      source.find(L"ncmUnblock297AnchorsMissing") != std::wstring_view::npos &&
+      source.find(L"ncmUnblock297Intercept") != std::wstring_view::npos &&
+      source.find(L"native function") != std::wstring_view::npos;
 
   if (!valid) {
     // Temporary RefPtr destruction after a rejected registration.

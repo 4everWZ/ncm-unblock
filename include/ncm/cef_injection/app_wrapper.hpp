@@ -20,6 +20,12 @@ enum class registration_state {
   failed,
 };
 
+enum class anchors_state {
+  pending,
+  found,
+  missing,
+};
+
 // Wraps an application without modifying the client-owned callback structure.
 // The returned wrapper owns one reference to `original` and starts with one
 // reference of its own. The caller releases that initial wrapper reference
@@ -32,9 +38,14 @@ enum class registration_state {
 // `on_web_kit_initialized`, after the client's original callback returns.
 [[nodiscard]] registration_state current_registration_state() noexcept;
 
-// Number of times the registered native extension handler's `execute` ran.
+// Number of times the registered native extension handler's marker execute ran.
 // Registration success alone does not increment this.
 [[nodiscard]] long current_marker_count() noexcept;
+
+// Process-local M4 observation. Anchors stay pending until the deferred shim
+// reports found or permanently missing; intercepts count player-URL callbacks.
+[[nodiscard]] anchors_state current_anchors_state() noexcept;
+[[nodiscard]] long current_intercept_count() noexcept;
 
 // Ownership for a non-null handler passed to `register_extension_fn` follows
 // CEF 1916 `CefV8HandlerCToCpp::Wrap`: construct with one reference, add one

@@ -116,6 +116,9 @@ try {
         $injectionRoot = (New-Item -ItemType Directory -Force -Path $InjectionOutputDirectory).FullName
         $startInfo.EnvironmentVariables['NCM_INJECTION_REPORT_DIR'] = $injectionRoot
         Write-Output "injection-output: $injectionRoot"
+        if ($ObservationSeconds -ge 120) {
+            Write-Output 'm4-action: after the main window appears, sign in if needed and play one normal track, then one greyed-out track.'
+        }
     }
     $launched = [System.Diagnostics.Process]::Start($startInfo)
 
@@ -125,6 +128,10 @@ try {
     $observedWindow = $false
     $observedRegistration = $false
     $observedMarker = $false
+    $observedAnchorsFound = $false
+    $observedIntercept = $false
+    $latestAnchors = 'pending'
+    $latestIntercepts = 0
     $snapshot = $null
     do {
         Start-Sleep -Milliseconds 500
@@ -151,10 +158,26 @@ try {
                         $_
                     }
                 }).Count -ne 0
+            foreach ($report in $reports) {
+                $text = Get-Content -LiteralPath $report.FullName -Raw
+                if ($text -match 'anchors=(\w+)') {
+                    $latestAnchors = $Matches[1]
+                    if ($latestAnchors -eq 'found') { $observedAnchorsFound = $true }
+                }
+                if ($text -match 'intercepts=(\d+)') {
+                    $value = [int]$Matches[1]
+                    if ($value -gt $latestIntercepts) { $latestIntercepts = $value }
+                    if ($value -ge 1) { $observedIntercept = $true }
+                }
+            }
         }
     } while ([DateTime]::UtcNow -lt $deadline -and
              ($censusEnabled -or
-              ($injectionEnabled -and (-not $observedRegistration -or -not $observedMarker)) -or
+              ($injectionEnabled -and (
+                    -not $observedRegistration -or
+                    -not $observedMarker -or
+                    ($ObservationSeconds -ge 120 -and
+                     (-not $observedAnchorsFound -or -not $observedIntercept)))) -or
               -not ($observedProxy -and $observedBackend -and $observedWindow)))
 
     $exited = $launched.HasExited
@@ -208,9 +231,21 @@ try {
         foreach ($report in $injectionReports) {
             $classification = (Get-Content -LiteralPath $report.FullName -Raw).Trim()
             Write-Output "  $($report.Name): $classification"
+            if ($classification -match 'anchors=(\w+)') {
+                $latestAnchors = $Matches[1]
+                if ($latestAnchors -eq 'found') { $observedAnchorsFound = $true }
+            }
+            if ($classification -match 'intercepts=(\d+)') {
+                $value = [int]$Matches[1]
+                if ($value -gt $latestIntercepts) { $latestIntercepts = $value }
+                if ($value -ge 1) { $observedIntercept = $true }
+            }
         }
         Write-Output "extension-registration-observed: $observedRegistration"
         Write-Output "native-marker-observed: $observedMarker"
+        Write-Output "anchors-observed: $latestAnchors"
+        Write-Output "intercepts-observed: $latestIntercepts"
+        Write-Output "m4-clearance: $(if ($observedAnchorsFound -and $observedIntercept) { 'ready' } else { 'incomplete' })"
     }
 
     if (-not $launched.HasExited) {

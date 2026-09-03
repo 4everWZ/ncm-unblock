@@ -35,6 +35,15 @@ config::settings g_settings{};
   return "unknown";
 }
 
+[[nodiscard]] const char* anchors_name() noexcept {
+  switch (cef_injection::current_anchors_state()) {
+    case cef_injection::anchors_state::pending: return "pending";
+    case cef_injection::anchors_state::found: return "found";
+    case cef_injection::anchors_state::missing: return "missing";
+  }
+  return "unknown";
+}
+
 [[nodiscard]] bool injection_reporting_enabled() noexcept {
   return GetEnvironmentVariableW(L"NCM_INJECTION_REPORT_DIR", nullptr, 0) != 0;
 }
@@ -53,11 +62,13 @@ void write_injection_report(cef_injection::import_hook_result hook) noexcept {
       path, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
       FILE_ATTRIBUTE_NORMAL, nullptr);
   if (file == INVALID_HANDLE_VALUE) return;
-  char line[256]{};
+  char line[320]{};
   const int written = sprintf_s(
-      line, "pid=%lu hook=%s registration=%s marker=%ld\n",
+      line,
+      "pid=%lu hook=%s registration=%s marker=%ld anchors=%s intercepts=%ld\n",
       GetCurrentProcessId(), cef_injection::describe(hook), registration_name(),
-      cef_injection::current_marker_count());
+      cef_injection::current_marker_count(), anchors_name(),
+      cef_injection::current_intercept_count());
   if (written > 0) {
     DWORD ignored{};
     WriteFile(file, line, static_cast<DWORD>(written), &ignored, nullptr);
@@ -72,19 +83,28 @@ void observe_injection(cef_injection::import_hook_result hook) noexcept {
   write_injection_report(hook);
   if (hook != cef_injection::import_hook_result::installed &&
       hook != cef_injection::import_hook_result::already_installed) return;
-  const auto deadline = GetTickCount64() + 60000;
+  const auto marker_deadline = GetTickCount64() + 60000;
   while (cef_injection::current_registration_state() ==
              cef_injection::registration_state::not_attempted &&
-         GetTickCount64() < deadline) {
+         GetTickCount64() < marker_deadline) {
     Sleep(100);
   }
   // Registration success alone is not marker clearance. Keep polling until a
   // native Execute is observed or the same deadline expires.
   while (cef_injection::current_marker_count() <= 0 &&
-         GetTickCount64() < deadline) {
+         GetTickCount64() < marker_deadline) {
     Sleep(100);
   }
   write_injection_report(hook);
+
+  // After marker observation, keep rewriting the report for a long operator-
+  // play window so deferred anchors/intercepts appear without new IPC. The
+  // product path remains poll-free when the investigation env var is unset.
+  const auto observation_deadline = GetTickCount64() + 900000;
+  while (GetTickCount64() < observation_deadline) {
+    Sleep(1000);
+    write_injection_report(hook);
+  }
 }
 
 void publish(session_result result) noexcept {

@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 
+#include <cwchar>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -174,6 +175,19 @@ int NCM_CEF_CALLBACK process_message(
   return 73;
 }
 
+cef::cef_string_t make_name(const wchar_t* value) {
+  return {const_cast<wchar_t*>(value), std::wcslen(value), nullptr};
+}
+
+void require_execute(
+    cef::cef_v8handler_t* handler, const wchar_t* native_name) {
+  cef::cef_v8value_t* retval = nullptr;
+  auto name = make_name(native_name);
+  require(handler->execute(handler, &name, nullptr, 0, nullptr, &retval,
+                           nullptr) == 1,
+          "a native handler execute did not report handled");
+}
+
 int __cdecl register_extension(
     const cef::cef_string_t* name, const cef::cef_string_t* code,
     cef::cef_v8handler_t* handler) {
@@ -190,15 +204,20 @@ int __cdecl register_extension(
           "M3 registration used the wrong extension name");
   const std::wstring_view source(code->str, code->length);
   require(source.find(L"native function") != std::wstring_view::npos &&
-              source.find(L"ncmUnblock297Marker") != std::wstring_view::npos,
-          "M3 registration did not publish its native marker");
+              source.find(L"ncmUnblock297Marker") != std::wstring_view::npos &&
+              source.find(L"ncmUnblock297AnchorsFound") !=
+                  std::wstring_view::npos &&
+              source.find(L"ncmUnblock297AnchorsMissing") !=
+                  std::wstring_view::npos &&
+              source.find(L"ncmUnblock297Intercept") != std::wstring_view::npos &&
+              source.find(L"nm.x") != std::wstring_view::npos &&
+              source.find(L"/api/song/enhance/player/url") !=
+                  std::wstring_view::npos,
+          "M3/M4 registration did not publish its deferred observation natives");
   // V8TrackObject retain stand-in.
   handler->base.add_ref(&handler->base);
   g_retained_handler = handler;
-  cef::cef_v8value_t* retval = nullptr;
-  require(handler->execute(handler, nullptr, nullptr, 0, nullptr, &retval,
-                           nullptr) == 1,
-          "the native marker handler did not report a handled execute");
+  require_execute(handler, L"ncmUnblock297Marker");
   return 1;
 }
 
@@ -319,6 +338,23 @@ void test_forwards_and_registers_once() {
           "successful registration destroyed the native handler");
   require(cef_injection::current_marker_count() > 0,
           "successful registration did not observe a native execute marker");
+  require(cef_injection::current_anchors_state() ==
+              cef_injection::anchors_state::pending,
+          "anchors should stay pending until the deferred shim reports");
+  require(cef_injection::current_intercept_count() == 0,
+          "intercepts should start at zero");
+  require_execute(g_retained_handler, L"ncmUnblock297AnchorsFound");
+  require(cef_injection::current_anchors_state() ==
+              cef_injection::anchors_state::found,
+          "AnchorsFound did not publish found");
+  require_execute(g_retained_handler, L"ncmUnblock297AnchorsMissing");
+  require(cef_injection::current_anchors_state() ==
+              cef_injection::anchors_state::found,
+          "AnchorsMissing must not overwrite found");
+  require_execute(g_retained_handler, L"ncmUnblock297Intercept");
+  require_execute(g_retained_handler, L"ncmUnblock297Intercept");
+  require(cef_injection::current_intercept_count() == 2,
+          "Intercept did not accumulate");
 
   require(wrapped_render->base.get_refct(&wrapped_render->base) == 1,
           "the render wrapper started with the wrong reference count");

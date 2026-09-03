@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <cstddef>
+#include <cwchar>
 #include <new>
 
 namespace ncm::cef_injection {
@@ -14,14 +15,120 @@ struct v8_handler_wrapper;
 
 long g_registration_state{static_cast<long>(registration_state::not_attempted)};
 long g_marker_count{};
+long g_anchors_state{static_cast<long>(anchors_state::pending)};
+long g_intercept_count{};
 
 constexpr wchar_t extension_name_text[] = L"ncm/unblock/m3";
+// Extension name stays `ncm/unblock/m3` for fixture stability; the IIFE now
+// carries M3 marker clearance plus M4 deferred NEJ observation.
 // `native function` is scoped to the surrounding function; the IIFE both
-// declares and invokes it when the extension is applied to a V8 context.
+// declares and invokes natives when the extension is applied to a V8 context.
+// Timer-free M4 observation. Live web.pack evidence shows player-URL posts go
+// through NEJ.P("nm.x") helpers (bc.hb -> nej.j/cq.he), not nej.ut.j class
+// constructors. Wrapping nej.ut.j correlated with STATUS_HEAP_CORRUPTION; this
+// path only arms NEJ.P and path-filters functions on the nm.x module.
 constexpr wchar_t extension_code_text[] =
     L"(function(){"
     L"native function ncmUnblock297Marker();"
+    L"native function ncmUnblock297AnchorsFound();"
+    L"native function ncmUnblock297AnchorsMissing();"
+    L"native function ncmUnblock297Intercept();"
     L"ncmUnblock297Marker();"
+    L"var PATH='/api/song/enhance/player/url';"
+    L"var NS='nm.x';"
+    L"var installed=0;"
+    L"function wrapCb(cb){"
+    L"return function(bm){"
+    L"try{"
+    L"if(bm&&(typeof bm.code!=='undefined'||"
+    L"(bm.data&&bm.data[0]&&typeof bm.data[0].code!=='undefined')))"
+    L"ncmUnblock297Intercept();"
+    L"}catch(e){}"
+    L"return cb.apply(this,arguments);"
+    L"};"
+    L"}"
+    L"function wrapFn(fn){"
+    L"if(typeof fn!=='function'||fn.__ncmM4)return fn;"
+    L"var w=function(){"
+    L"var a0=arguments[0];"
+    L"if(typeof a0==='string'&&a0.indexOf(PATH)!==-1){"
+    L"var args=[],i,cbIdx=-1;"
+    L"for(i=0;i<arguments.length;i++)args[i]=arguments[i];"
+    L"for(i=args.length-1;i>=1;i--){"
+    L"if(typeof args[i]==='function'){cbIdx=i;break;}"
+    L"}"
+    L"if(cbIdx>=0)args[cbIdx]=wrapCb(args[cbIdx]);"
+    L"return fn.apply(this,args);"
+    L"}"
+    L"return fn.apply(this,arguments);"
+    L"};"
+    L"w.__ncmM4=1;"
+    L"return w;"
+    L"}"
+    L"function install(mod){"
+    L"if(!mod||typeof mod!=='object')return;"
+    L"var k,fn,n=0;"
+    L"for(k in mod){"
+    L"try{"
+    L"fn=mod[k];"
+    L"if(typeof fn!=='function'||fn.__ncmM4)continue;"
+    L"mod[k]=wrapFn(fn);"
+    L"n++;"
+    L"}catch(e){}"
+    L"}"
+    L"if(n>0&&installed===0){"
+    L"installed=1;"
+    L"try{ncmUnblock297AnchorsFound();}catch(e){}"
+    L"}"
+    L"}"
+    L"function wrapP(nej){"
+    L"var orig=nej.P;"
+    L"if(typeof orig!=='function'||orig.__ncmM4)return;"
+    L"var wrapped=function(name){"
+    L"var mod=orig.apply(this,arguments);"
+    L"if(name===NS)install(mod);"
+    L"return mod;"
+    L"};"
+    L"wrapped.__ncmM4=1;"
+    L"try{nej.P=wrapped;}catch(e){}"
+    L"}"
+    L"function arm(nej){"
+    L"if(!nej||typeof nej!=='object')return;"
+    L"if(typeof nej.P==='function'){wrapP(nej);return;}"
+    L"try{"
+    L"var rawP;"
+    L"Object.defineProperty(nej,'P',{"
+    L"configurable:true,enumerable:true,"
+    L"get:function(){return rawP;},"
+    L"set:function(v){"
+    L"rawP=v;"
+    L"try{"
+    L"delete nej.P;"
+    L"}catch(e){}"
+    L"try{nej.P=v;}catch(e){rawP=v;}"
+    L"wrapP(nej);"
+    L"}"
+    L"});"
+    L"}catch(e){}"
+    L"}"
+    L"try{"
+    L"var root=this;"
+    L"if(root.NEJ&&typeof root.NEJ==='object'){"
+    L"arm(root.NEJ);"
+    L"}else{"
+    L"var rawNEJ;"
+    L"Object.defineProperty(root,'NEJ',{"
+    L"configurable:true,enumerable:true,"
+    L"get:function(){return rawNEJ;},"
+    L"set:function(v){"
+    L"rawNEJ=v;"
+    L"try{delete root.NEJ;}catch(e){}"
+    L"try{root.NEJ=v;}catch(e){rawNEJ=v;}"
+    L"arm(v);"
+    L"}"
+    L"});"
+    L"}"
+    L"}catch(e){}"
     L"})();";
 
 using create_null_fn = cef::cef_v8value_t*(__cdecl*)();
@@ -29,6 +136,16 @@ using create_null_fn = cef::cef_v8value_t*(__cdecl*)();
 [[nodiscard]] cef::cef_string_t static_string(
     const wchar_t* value, std::size_t length) noexcept {
   return {const_cast<wchar_t*>(value), length, nullptr};
+}
+
+[[nodiscard]] bool name_equals(
+    const cef::cef_string_t* name, const wchar_t* expected) noexcept {
+  if (name == nullptr || name->str == nullptr || expected == nullptr) {
+    return false;
+  }
+  const auto expected_length = std::wcslen(expected);
+  return name->length == expected_length &&
+      std::wcsncmp(name->str, expected, expected_length) == 0;
 }
 
 struct app_wrapper {
@@ -181,12 +298,35 @@ int NCM_CEF_CALLBACK handler_get_refct(cef::cef_base_t* self) {
   return create_null == nullptr ? nullptr : create_null();
 }
 
+void dispatch_native(const cef::cef_string_t* name) noexcept {
+  // Fixtures historically invoke execute with a null name for the marker path.
+  if (name == nullptr || name->str == nullptr ||
+      name_equals(name, L"ncmUnblock297Marker")) {
+    InterlockedIncrement(&g_marker_count);
+    return;
+  }
+  if (name_equals(name, L"ncmUnblock297AnchorsFound")) {
+    InterlockedExchange(
+        &g_anchors_state, static_cast<long>(anchors_state::found));
+    return;
+  }
+  if (name_equals(name, L"ncmUnblock297AnchorsMissing")) {
+    InterlockedCompareExchange(
+        &g_anchors_state, static_cast<long>(anchors_state::missing),
+        static_cast<long>(anchors_state::pending));
+    return;
+  }
+  if (name_equals(name, L"ncmUnblock297Intercept")) {
+    InterlockedIncrement(&g_intercept_count);
+  }
+}
+
 int NCM_CEF_CALLBACK handler_execute(
-    cef::cef_v8handler_t* self, const cef::cef_string_t*,
+    cef::cef_v8handler_t* self, const cef::cef_string_t* name,
     cef::cef_v8value_t*, std::size_t, cef::cef_v8value_t* const*,
     cef::cef_v8value_t** retval, cef::cef_string_t*) {
   (void)self;
-  InterlockedIncrement(&g_marker_count);
+  dispatch_native(name);
   if (retval != nullptr) {
     *retval = try_create_null_value();
   }
@@ -415,6 +555,15 @@ registration_state current_registration_state() noexcept {
 
 long current_marker_count() noexcept {
   return InterlockedCompareExchange(&g_marker_count, 0, 0);
+}
+
+anchors_state current_anchors_state() noexcept {
+  return static_cast<anchors_state>(
+      InterlockedCompareExchange(&g_anchors_state, 0, 0));
+}
+
+long current_intercept_count() noexcept {
+  return InterlockedCompareExchange(&g_intercept_count, 0, 0);
 }
 
 }  // namespace ncm::cef_injection
