@@ -15,6 +15,7 @@ namespace ncm::launcher {
 struct unm_sidecar_options {
   std::filesystem::path executable;
   std::filesystem::path working_directory;
+  std::optional<std::filesystem::path> output_file;
   std::vector<std::wstring> arguments;
   std::optional<std::uint16_t> fixed_http_port;
   std::optional<std::uint16_t> fixed_https_port;

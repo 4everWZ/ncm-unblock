@@ -13,6 +13,8 @@ struct process_spec {
   std::filesystem::path executable;
   std::filesystem::path working_directory;
   std::vector<std::wstring> arguments;
+  std::optional<std::filesystem::path> output_file;
+  bool no_window{};
 };
 
 class managed_process {

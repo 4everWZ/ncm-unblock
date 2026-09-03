@@ -467,7 +467,9 @@ unm_sidecar unm_sidecar::launch(const unm_sidecar_options& options) {
     process_spec process_options{
         options.executable,
         options.working_directory,
-        build_arguments(options, http_port, https_port)};
+        build_arguments(options, http_port, https_port),
+        options.output_file,
+        true};
     auto process = managed_process::prepare(process_options);
     release_and_resume(lease, process);
     last_status = wait_until_ready(

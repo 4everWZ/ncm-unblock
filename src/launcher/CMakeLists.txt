@@ -13,3 +13,20 @@ target_link_libraries(
   PRIVATE iphlpapi ws2_32
 )
 target_include_directories(ncm_launcher_unm_sidecar PUBLIC "${PROJECT_SOURCE_DIR}/include")
+
+add_library(ncm_launcher_ncm_session STATIC ncm_session.cpp)
+target_link_libraries(ncm_launcher_ncm_session PUBLIC ncm_project_options)
+target_include_directories(ncm_launcher_ncm_session PUBLIC "${PROJECT_SOURCE_DIR}/include")
+
+add_executable(ncm-unblock WIN32 main.cpp)
+target_link_libraries(
+  ncm-unblock
+  PRIVATE
+    ncm_config
+    ncm_launcher_ncm_session
+    ncm_launcher_unm_sidecar
+    ncm_runtime_probe_lib
+    ncm_project_options
+)
+
+install(TARGETS ncm-unblock RUNTIME DESTINATION .)

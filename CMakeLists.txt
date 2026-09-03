@@ -28,6 +28,7 @@ include(CTest)
 
 add_subdirectory(src/runtime_probe)
 add_subdirectory(src/proxy_observer)
+add_subdirectory(src/config)
 add_subdirectory(src/launcher)
 
 if(BUILD_TESTING)

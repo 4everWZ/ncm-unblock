@@ -30,10 +30,10 @@ path = C:\Program Files (x86)\Netease\CloudMusic\cloudmusic.exe
 path = core\unblockneteasemusic.exe
 http_port = 3412
 https_port = 3413
-# Omit sources to use the pinned UNM release's own defaults.
+# Leave sources empty to use the pinned UNM release's own defaults.
+sources =
 
 [launcher]
-show_console = false
 write_log = true
 ```
 

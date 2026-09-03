@@ -18,6 +18,15 @@ From PowerShell on Windows with Visual Studio 2022 Build Tools, CMake, and Ninja
 
 The script discovers the Visual Studio installation, activates its Win32 toolchain, configures an out-of-source build, compiles, and runs focused tests. Use `-Configuration Release` for a release build.
 
+## Run
+
+1. Build Release, then copy `ncm-unblock.ini.example` beside `build/win32-release/src/launcher/ncm-unblock.exe` as `ncm-unblock.ini`.
+2. Set `[ncm] path` to the signed x86 NCM 2.9.7.199711 executable and `[unm] path` to the upstream standalone UNM executable. Relative paths are resolved from the launcher directory.
+3. In NCM, set **Settings → Tools → HTTP proxy → Custom proxy** to `127.0.0.1` and the configured `http_port` once.
+4. Exit NCM completely from its tray icon, then run `ncm-unblock.exe`.
+
+The launcher starts UNM hidden, waits for both fixed loopback listeners and a valid PAC response, then starts NCM. Closing the NCM window to the tray keeps UNM alive; choosing NCM's tray **Exit** stops UNM and the launcher. With logging enabled, diagnostics are appended under `logs/` beside the launcher. Leave `sources` empty unless intentionally overriding the pinned UNM release defaults.
+
 Inspect the local NCM executable without changing it:
 
 ```powershell

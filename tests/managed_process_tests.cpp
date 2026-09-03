@@ -5,9 +5,11 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 
@@ -230,6 +232,25 @@ void test_invalid_launch_inputs_rejected(const std::filesystem::path& child) {
   require(missing_executable_rejected, "missing executable launch did not fail");
 }
 
+void test_output_redirection(const std::filesystem::path& child) {
+  const auto output = std::filesystem::temp_directory_path() /
+      (L"ncm-managed-output-" + std::to_wstring(GetCurrentProcessId()) + L".log");
+  std::filesystem::remove(output);
+  auto spec = child_spec(child, {L"--write-stdio"});
+  spec.output_file = output;
+  spec.no_window = true;
+  auto process = ncm::launcher::managed_process::start(spec);
+  const auto exit = process.wait_for_root(std::chrono::seconds(5));
+  require(exit.has_value() && *exit == 0, "redirected child failed");
+  std::ifstream stream(output, std::ios::binary);
+  const std::string contents(
+      (std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+  stream.close();
+  std::filesystem::remove(output);
+  require(contents == "managed stdout\nmanaged stderr\n",
+          "stdout and stderr were not redirected to one append log");
+}
+
 }  // namespace
 
 int wmain(int argument_count, wchar_t** arguments) {
@@ -247,6 +268,7 @@ int wmain(int argument_count, wchar_t** arguments) {
     test_job_close_leaves_unrelated_process(child);
     test_relative_path_rejected();
     test_invalid_launch_inputs_rejected(child);
+    test_output_redirection(child);
     std::cout << "managed process tests passed\n";
     return 0;
   } catch (const std::exception& error) {

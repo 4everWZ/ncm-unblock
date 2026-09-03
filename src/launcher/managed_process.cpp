@@ -3,7 +3,10 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -81,6 +84,112 @@ void reject_embedded_nul(std::wstring_view value, const char* field) {
   }
   return accounting.ActiveProcesses == 0;
 }
+
+class owned_handle {
+ public:
+  owned_handle() noexcept = default;
+  explicit owned_handle(HANDLE handle) noexcept : handle_(handle) {}
+  ~owned_handle() {
+    if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE) {
+      CloseHandle(handle_);
+    }
+  }
+  owned_handle(const owned_handle&) = delete;
+  owned_handle& operator=(const owned_handle&) = delete;
+  owned_handle(owned_handle&& other) noexcept
+      : handle_(std::exchange(other.handle_, nullptr)) {}
+  owned_handle& operator=(owned_handle&& other) noexcept {
+    if (this != &other) {
+      if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE) {
+        CloseHandle(handle_);
+      }
+      handle_ = std::exchange(other.handle_, nullptr);
+    }
+    return *this;
+  }
+  [[nodiscard]] HANDLE get() const noexcept { return handle_; }
+
+ private:
+  HANDLE handle_{};
+};
+
+class process_startup {
+ public:
+  explicit process_startup(const process_spec& spec) {
+    startup_.StartupInfo.cb = sizeof(startup_);
+    if (!spec.output_file.has_value()) {
+      return;
+    }
+    if (!spec.output_file->is_absolute()) {
+      throw std::invalid_argument("managed output file path must be absolute");
+    }
+    reject_embedded_nul(spec.output_file->wstring(), "managed output file path");
+    SECURITY_ATTRIBUTES security{};
+    security.nLength = sizeof(security);
+    security.bInheritHandle = TRUE;
+    output_ = owned_handle(CreateFileW(
+        spec.output_file->c_str(), FILE_APPEND_DATA,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &security,
+        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (output_.get() == INVALID_HANDLE_VALUE) {
+      throw_last_error("CreateFileW(managed output)");
+    }
+    input_ = owned_handle(CreateFileW(
+        L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &security,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (input_.get() == INVALID_HANDLE_VALUE) {
+      throw_last_error("CreateFileW(NUL)");
+    }
+    startup_.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup_.StartupInfo.hStdInput = input_.get();
+    startup_.StartupInfo.hStdOutput = output_.get();
+    startup_.StartupInfo.hStdError = output_.get();
+
+    SIZE_T bytes{};
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || bytes == 0) {
+      throw_last_error("InitializeProcThreadAttributeList(size)");
+    }
+    attributes_.resize(bytes);
+    startup_.lpAttributeList = reinterpret_cast<PPROC_THREAD_ATTRIBUTE_LIST>(
+        attributes_.data());
+    if (!InitializeProcThreadAttributeList(
+            startup_.lpAttributeList, 1, 0, &bytes)) {
+      throw_last_error("InitializeProcThreadAttributeList");
+    }
+    initialized_ = true;
+    handles_ = {input_.get(), output_.get()};
+    if (!UpdateProcThreadAttribute(
+            startup_.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            handles_.data(), sizeof(handles_), nullptr, nullptr)) {
+      throw_last_error("UpdateProcThreadAttribute(handle list)");
+    }
+  }
+
+  ~process_startup() {
+    if (initialized_) {
+      DeleteProcThreadAttributeList(startup_.lpAttributeList);
+    }
+  }
+  process_startup(const process_startup&) = delete;
+  process_startup& operator=(const process_startup&) = delete;
+
+  [[nodiscard]] STARTUPINFOW* info() noexcept {
+    return &startup_.StartupInfo;
+  }
+  [[nodiscard]] bool inherits_handles() const noexcept {
+    return output_.get() != nullptr;
+  }
+  [[nodiscard]] bool extended() const noexcept { return initialized_; }
+
+ private:
+  STARTUPINFOEXW startup_{};
+  std::vector<std::byte> attributes_;
+  std::array<HANDLE, 2> handles_{};
+  owned_handle input_;
+  owned_handle output_;
+  bool initialized_{};
+};
 
 }  // namespace
 
@@ -169,14 +278,20 @@ managed_process managed_process::prepare(const process_spec& spec) {
     throw_last_error("SetInformationJobObject(completion port)");
   }
 
-  STARTUPINFOW startup{};
-  startup.cb = sizeof(startup);
+  process_startup startup(spec);
+  DWORD creation_flags = CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT;
+  if (spec.no_window) {
+    creation_flags |= CREATE_NO_WINDOW;
+  }
+  if (startup.extended()) {
+    creation_flags |= EXTENDED_STARTUPINFO_PRESENT;
+  }
   PROCESS_INFORMATION process{};
   if (!CreateProcessW(
-          spec.executable.c_str(), command_line.data(), nullptr, nullptr, FALSE,
-          CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, nullptr,
+          spec.executable.c_str(), command_line.data(), nullptr, nullptr,
+          startup.inherits_handles() ? TRUE : FALSE, creation_flags, nullptr,
           working_directory.empty() ? nullptr : working_directory.c_str(),
-          &startup, &process)) {
+          startup.info(), &process)) {
     const auto status = GetLastError();
     CloseHandle(completion_port);
     CloseHandle(job);

@@ -40,3 +40,19 @@ add_test(
   NAME unm_sidecar_tests
   COMMAND unm_sidecar_tests $<TARGET_FILE:managed_process_test_child>
 )
+
+add_executable(config_settings_tests config_settings_tests.cpp)
+target_link_libraries(config_settings_tests PRIVATE ncm_config ncm_project_options)
+add_test(NAME config_settings_tests COMMAND config_settings_tests)
+
+add_executable(ncm_session_test_client ncm_session_test_client.cpp)
+target_link_libraries(ncm_session_test_client PRIVATE ncm_project_options)
+
+add_executable(ncm_session_tests ncm_session_tests.cpp)
+target_link_libraries(
+  ncm_session_tests PRIVATE ncm_launcher_ncm_session ncm_project_options
+)
+add_test(
+  NAME ncm_session_tests
+  COMMAND ncm_session_tests $<TARGET_FILE:ncm_session_test_client>
+)

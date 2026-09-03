@@ -132,6 +132,20 @@ int wmain(int argument_count, wchar_t** arguments) {
     std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     return 0;
   }
+  if (argument_count == 2 && std::wstring_view(arguments[1]) == L"--write-stdio") {
+    constexpr std::string_view output = "managed stdout\n";
+    constexpr std::string_view error = "managed stderr\n";
+    DWORD written{};
+    const auto output_ok = WriteFile(
+        GetStdHandle(STD_OUTPUT_HANDLE), output.data(),
+        static_cast<DWORD>(output.size()), &written, nullptr) &&
+        written == output.size();
+    const auto error_ok = WriteFile(
+        GetStdHandle(STD_ERROR_HANDLE), error.data(),
+        static_cast<DWORD>(error.size()), &written, nullptr) &&
+        written == error.size();
+    return output_ok && error_ok ? 0 : 125;
+  }
   if (argument_count == 4 && std::wstring_view(arguments[1]) == L"--bind-pair") {
     wchar_t* http_end{};
     wchar_t* https_end{};
