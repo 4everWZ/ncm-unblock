@@ -30,7 +30,7 @@ path = C:\Program Files (x86)\Netease\CloudMusic\cloudmusic.exe
 path = core\unblockneteasemusic.exe
 http_port = 3412
 https_port = 3413
-sources = kuwo
+# Omit sources to use the pinned UNM release's own defaults.
 
 [launcher]
 show_console = false
@@ -38,7 +38,7 @@ write_log = true
 ```
 
 - HTTP and HTTPS ports are explicit and stable so NCM's saved proxy setting does not change between runs. The launcher fails clearly if either configured port is unavailable; it does not silently select another port.
-- Source names are passed to UNM in configured order. The launcher does not interpret provider APIs.
+- When no source list is configured, the launcher omits `-o` and uses the pinned UNM release's own defaults. An explicit source list is passed to UNM in configured order. The launcher does not interpret provider APIs or assume that a historically available provider is still a valid default.
 - Injection-only CEF, WinMM, shim, frontend, and matcher settings are invalid for the production configuration.
 
 ### First-time NCM setup
@@ -51,7 +51,7 @@ The user configures NCM 2.9.7 through its supported UI at **Settings â†’ Tools â
 2. If a matching NCM session is already running for the current user and target installation, fail with an instruction to exit NCM completely. The MVP does not attach to an existing session.
 3. Reserve both configured ports exclusively on `127.0.0.1`.
 4. Prepare UNM suspended, assign it to a private Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, redirect stdout/stderr to `logs/unm.log`, release the port leases immediately before resume, and start it without a visible window.
-5. Invoke the pinned UNM interface with explicit loopback binding, the configured HTTP/HTTPS pair, restricted mode, and configured sources; the expected shape is `-a 127.0.0.1 -p HTTP:HTTPS -s -o SOURCES`.
+5. Invoke the pinned UNM interface with explicit loopback binding, the configured HTTP/HTTPS pair, and restricted mode. Append `-o SOURCES` only for an explicit non-empty source list; otherwise preserve the pinned release's defaults.
 6. Declare readiness only while the managed UNM tree remains alive, both configured listeners are owned by processes in its private job, and `/proxy.pac` returns a complete valid response. Readiness is proxy initialization, not provider or playback health.
 7. Start `cloudmusic.exe` normally with `CreateProcessW`. Do not inject, suspend NCM, or add ambient proxy flags; NCM uses its saved custom-proxy setting.
 
