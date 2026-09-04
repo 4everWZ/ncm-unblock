@@ -46,8 +46,14 @@ $expectedFiles = @(
     'UnblockLite/manifest.json',
     'UnblockLite/native/unm-host.exe'
 ) | Sort-Object
+$stagePrefix = $stage.TrimEnd(
+    [IO.Path]::DirectorySeparatorChar,
+    [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
 $actualFiles = @(Get-ChildItem -LiteralPath $stage -File -Recurse | ForEach-Object {
-        [IO.Path]::GetRelativePath($stage, $_.FullName).Replace('\', '/')
+        if (-not $_.FullName.StartsWith($stagePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Installed file escaped the package stage: $($_.FullName)"
+        }
+        $_.FullName.Substring($stagePrefix.Length).Replace('\', '/')
     } | Sort-Object)
 if (Compare-Object -ReferenceObject $expectedFiles -DifferenceObject $actualFiles) {
     throw 'Installed package contents differ from the explicit runtime manifest.'
