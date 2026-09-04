@@ -1,57 +1,34 @@
-# ncm-unblock-297
+# UnblockLite
 
-A lightweight native Win32 launcher that runs an upstream UnblockNeteaseMusic (UNM) standalone executable only while NetEase Cloud Music 2.9.7.199711 is in use.
+A BetterNCM plugin plus a tiny native supervisor for NetEase Cloud Music 2.10.12. The plugin owns UI, config, and NCM's loopback proxy setting. `unm-host.exe` owns UnblockNeteaseMusic (UNM): one instance, a private Job Object, readiness, and exit.
 
-The production direction is a portable launcher plus a loopback UNM sidecar. DLL proxying, CEF/V8 hooks, and in-process matching are not part of the production runtime; that work is preserved on the `research/native-injection` branch.
+Closing NCM to the tray keeps UNM. Choosing NCM's tray **Exit** ends the NCM main process; the host then terminates its UNM job and exits. After a full NCM exit there is no host or UNM residue.
 
-The current product contract is in [the canonical specification](docs/specs/ncm-unblock-297.md), and resumable work is tracked in [the current work plan](docs/plans/ncm-unblock-297.md).
+DLL proxying, CEF/V8 hooks, and in-process matching are not part of this product. That work stays on `research/native-injection`. The previous NCM 2.9.7 portable launcher is on `ncm-2.9.7`.
 
-Material under `tmp/` is intentionally ignored and is not an implementation contract.
+The contract is [docs/specs/ncm-unblock-lite.md](docs/specs/ncm-unblock-lite.md). Work is tracked in [docs/plans/ncm-unblock-lite.md](docs/plans/ncm-unblock-lite.md). `tmp/` is ignored and is not a contract.
 
-## Build and test
-
-From PowerShell on Windows with Visual Studio 2022 Build Tools, CMake, and Ninja installed:
+## Build
 
 ```powershell
 ./tools/build.ps1
 ```
 
-The script discovers the Visual Studio installation, activates its Win32 toolchain, configures an out-of-source build, compiles, and runs focused tests. Use `-Configuration Release` for a release build.
+Requires Visual Studio 2022 Build Tools, CMake, and Ninja. The host is x64. Use `-Configuration Release` for a release build.
 
 ## First use
 
-1. Exit NCM completely from its tray icon, then extract the release ZIP to a permanent directory.
-2. Double-click `setup.cmd` and accept the Windows administrator prompt. Setup detects the signed NCM 2.9.7.199711 installation, downloads the pinned official UNM v0.28.0 executable, writes the NCM path, and redirects the existing NCM desktop and Start menu shortcuts to the launcher while retaining the NCM icon.
-3. In NCM, set **Settings → Tools → HTTP proxy → Custom proxy** to `127.0.0.1` and port `3412` once.
+1. Install NCM 2.10.12 and BetterNCM v2.
+2. Copy the `UnblockLite` folder from a release (or a staged `out/` package) into BetterNCM's plugins directory.
+3. Download official UNM [v0.28.0](https://github.com/UnblockNeteaseMusic/server/releases/tag/v0.28.0) Windows x64 standalone, rename it to `UnblockNeteaseMusic.exe`, and place it at `UnblockLite/core/UnblockNeteaseMusic.exe`.
+4. Enable the plugin. If **Start with NCM** is on, it starts the host and writes NCM's custom HTTP proxy to `127.0.0.1:3412` when that value is not already set.
 
-Afterward, start NCM from its normal desktop or Start menu shortcut. Keep the extracted directory in place because the shortcut targets its `ncm-unblock.exe`. To undo shortcut changes, run `restore-shortcuts.cmd`; the first setup preserves each replaced shortcut and repeated setup runs do not overwrite those backups.
-
-For a manual or development setup, place the official UNM executable at `core/unblockneteasemusic-win-x64.exe`, edit `ncm-unblock.ini`, and run `ncm-unblock.exe` directly.
-
-The launcher starts UNM hidden, waits for both fixed loopback listeners and a valid PAC response, then starts NCM. Closing the NCM window to the tray keeps UNM alive; choosing NCM's tray **Exit** stops UNM and the launcher. With logging enabled, diagnostics are appended under `logs/` beside the launcher. Leave `sources` empty unless intentionally overriding the pinned UNM release defaults.
+V1 does not download UNM. Leave **Sources** empty unless you are overriding the pinned UNM defaults.
 
 ## Package
-
-Create the verified portable ZIP with:
 
 ```powershell
 ./tools/package.ps1
 ```
 
-The archive is written under `out/` and intentionally does not redistribute UNM. `setup.cmd` downloads the pinned official v0.28.0 Windows x64 standalone executable directly from its GitHub release; `core/README.txt` documents the manual fallback. No separate Node installation is required because that upstream executable contains its own runtime.
-
-Inspect the local NCM executable without changing it:
-
-```powershell
-./build/win32-debug/src/runtime_probe/ncm_runtime_probe.exe `
-  'C:\Path\To\CloudMusic\cloudmusic.exe'
-```
-
-Run the bounded loopback proxy observer for controlled experiments:
-
-```powershell
-./build/win32-debug/src/proxy_observer/ncm_proxy_observer.exe `
-  --port 0 --max-events 20 --idle-timeout-ms 30000
-```
-
-The observer binds exclusively to `127.0.0.1`, prints only classified request metadata, never logs raw hosts, paths, query strings, headers, or bodies, and rejects every request with HTTP 502. It is an investigation tool, not a forwarding proxy.
+The ZIP under `out/` contains the plugin, `unm-host.exe`, and a `core/` placement notice. It does not redistribute UNM.

@@ -1,17 +1,17 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ncm_unblock_297 VERSION 0.1.0 LANGUAGES CXX)
+project(ncm_unblock_lite VERSION 0.1.0 LANGUAGES CXX)
 
 if(NOT WIN32)
-  message(FATAL_ERROR "ncm-unblock-297 currently supports Windows only")
+  message(FATAL_ERROR "ncm-unblock-lite currently supports Windows only")
 endif()
 
 if(NOT MSVC)
-  message(FATAL_ERROR "ncm-unblock-297 currently requires the MSVC toolchain")
+  message(FATAL_ERROR "ncm-unblock-lite currently requires the MSVC toolchain")
 endif()
 
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
-  message(FATAL_ERROR "ncm-unblock-297 currently requires a Win32 toolchain")
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  message(FATAL_ERROR "ncm-unblock-lite currently requires an x64 toolchain")
 endif()
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -26,10 +26,8 @@ endif()
 
 include(CTest)
 
-add_subdirectory(src/runtime_probe)
-add_subdirectory(src/proxy_observer)
-add_subdirectory(src/config)
 add_subdirectory(src/launcher)
+add_subdirectory(src/host)
 
 if(BUILD_TESTING)
   add_subdirectory(tests)
@@ -37,21 +35,14 @@ endif()
 
 install(FILES README.md DESTINATION . COMPONENT Runtime)
 install(
-  FILES ncm-unblock.ini.example
-  DESTINATION .
-  RENAME ncm-unblock.ini
-  COMPONENT Runtime
-)
-install(
-  FILES packaging/core/README.txt
-  DESTINATION core
-  COMPONENT Runtime
-)
-install(
   FILES
-    packaging/setup.cmd
-    packaging/setup.ps1
-    packaging/restore-shortcuts.cmd
-  DESTINATION .
+    plugin/manifest.json
+    plugin/main.js
+  DESTINATION UnblockLite
+  COMPONENT Runtime
+)
+install(
+  FILES core/README.txt
+  DESTINATION UnblockLite/core
   COMPONENT Runtime
 )

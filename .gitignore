@@ -5,5 +5,5 @@ tmp/
 CMakeUserPresets.json
 .claude/
 claude.md
-ncm-unblock.ini
-packaging/
+core/*.exe
+plugin/native/

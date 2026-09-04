@@ -7,20 +7,20 @@
   },
   "configurePresets": [
     {
-      "name": "win32-debug",
-      "displayName": "MSVC Win32 Debug",
+      "name": "x64-debug",
+      "displayName": "MSVC x64 Debug",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/win32-debug",
+      "binaryDir": "${sourceDir}/build/x64-debug",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "win32-release",
-      "displayName": "MSVC Win32 Release",
+      "name": "x64-release",
+      "displayName": "MSVC x64 Release",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/win32-release",
+      "binaryDir": "${sourceDir}/build/x64-release",
       "cacheVariables": {
         "BUILD_TESTING": "ON",
         "CMAKE_BUILD_TYPE": "Release"
@@ -29,25 +29,25 @@
   ],
   "buildPresets": [
     {
-      "name": "win32-debug",
-      "configurePreset": "win32-debug"
+      "name": "x64-debug",
+      "configurePreset": "x64-debug"
     },
     {
-      "name": "win32-release",
-      "configurePreset": "win32-release"
+      "name": "x64-release",
+      "configurePreset": "x64-release"
     }
   ],
   "testPresets": [
     {
-      "name": "win32-debug",
-      "configurePreset": "win32-debug",
+      "name": "x64-debug",
+      "configurePreset": "x64-debug",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "name": "win32-release",
-      "configurePreset": "win32-release",
+      "name": "x64-release",
+      "configurePreset": "x64-release",
       "output": {
         "outputOnFailure": true
       }

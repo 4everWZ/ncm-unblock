@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $outputRoot = [IO.Path]::GetFullPath((Join-Path $repository 'out'))
-$packageName = 'ncm-unblock-297-0.1.0-win32'
+$packageName = 'unblock-lite-0.1.0-x64'
 $stage = [IO.Path]::GetFullPath((Join-Path $outputRoot $packageName))
 $archive = [IO.Path]::GetFullPath((Join-Path $outputRoot ($packageName + '.zip')))
 $expectedStagePrefix = $outputRoot.TrimEnd(
@@ -33,20 +33,18 @@ if (Test-Path -LiteralPath $archive) {
     Remove-Item -LiteralPath $archive
 }
 
-& cmake --install (Join-Path $repository 'build\win32-release') `
+& cmake --install (Join-Path $repository 'build\x64-release') `
     --prefix $stage --component Runtime
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
 $expectedFiles = @(
-    'core/README.txt',
-    'ncm-unblock.exe',
-    'ncm-unblock.ini',
     'README.md',
-    'restore-shortcuts.cmd',
-    'setup.cmd',
-    'setup.ps1'
+    'UnblockLite/core/README.txt',
+    'UnblockLite/main.js',
+    'UnblockLite/manifest.json',
+    'UnblockLite/native/unm-host.exe'
 ) | Sort-Object
 $actualFiles = @(Get-ChildItem -LiteralPath $stage -File -Recurse | ForEach-Object {
         [IO.Path]::GetRelativePath($stage, $_.FullName).Replace('\', '/')

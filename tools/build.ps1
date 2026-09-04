@@ -27,9 +27,9 @@ if (-not (Test-Path -LiteralPath $vsDevCmd)) {
 }
 
 $environment = & $env:ComSpec /d /s /c `
-    ('"' + $vsDevCmd + '" -no_logo -arch=x86 -host_arch=x64 >nul && set')
+    ('"' + $vsDevCmd + '" -no_logo -arch=x64 -host_arch=x64 >nul && set')
 if ($LASTEXITCODE -ne 0) {
-    throw 'Failed to activate the Visual Studio Win32 build environment.'
+    throw 'Failed to activate the Visual Studio x64 build environment.'
 }
 
 foreach ($line in $environment) {
@@ -38,7 +38,7 @@ foreach ($line in $environment) {
     }
 }
 
-$preset = 'win32-' + $Configuration.ToLowerInvariant()
+$preset = 'x64-' + $Configuration.ToLowerInvariant()
 
 & cmake --preset $preset
 if ($LASTEXITCODE -ne 0) {
