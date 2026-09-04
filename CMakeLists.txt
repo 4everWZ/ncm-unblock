@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ncm_unblock_lite VERSION 0.1.1 LANGUAGES CXX)
+project(ncm_unblock_lite VERSION 0.1.2 LANGUAGES CXX)
 
 if(NOT WIN32)
   message(FATAL_ERROR "ncm-unblock-lite currently supports Windows only")

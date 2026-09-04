@@ -57,7 +57,23 @@
   }
 
   function quoteCmd(value) {
+    // Escape for embedding inside a double-quoted Windows command-line fragment.
     return `"${String(value).replace(/"/g, '\\"')}"`;
+  }
+
+  function quotePsSingle(value) {
+    return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  function isValidSourceName(token) {
+    return /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(token);
+  }
+
+  function sanitizeSources(raw) {
+    return String(raw || "")
+      .split(/[,\s;]+/)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0 && isValidSourceName(item));
   }
 
   function normalizeDir(path) {
@@ -234,11 +250,6 @@
     return joinPath(data, relative);
   }
 
-  async function hostCommand(args) {
-    const host = await absoluteForExec(await resolveHost());
-    return `cmd /c start "" /b ${quoteCmd(host)} ${args}`;
-  }
-
   async function startHost() {
     const settings = configOf();
     const ncm = await ncmExecutable();
@@ -249,20 +260,25 @@
         "Missing unm-host.exe, UNM executable, or NCM path. Put UNM at BetterNCM data/UnblockLite/UnblockNeteaseMusic.exe",
       );
     }
+    // PS5 Start-Process joins ArgumentList arrays with spaces and does NOT
+    // quote tokens, so paths under "Program Files" must be one pre-quoted string.
     const pieces = [
       `--ncm ${quoteCmd(ncm)}`,
       `--unm ${quoteCmd(unm)}`,
       `--http ${settings.httpPort}`,
       `--https ${httpsPort(settings.httpPort)}`,
     ];
-    const sources = settings.sources
-      .split(/[,\s;]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const sources = sanitizeSources(settings.sources);
     if (sources.length > 0) {
       pieces.push(`--sources ${quoteCmd(sources.join(","))}`);
     }
-    await exec(await hostCommand(pieces.join(" ")));
+    const argumentList = pieces.join(" ");
+    const command =
+      "powershell -NoProfile -WindowStyle Hidden -Command " +
+      `Start-Process -FilePath ${quotePsSingle(host)} ` +
+      `-ArgumentList ${quotePsSingle(argumentList)} ` +
+      "-WindowStyle Hidden";
+    await exec(command);
   }
 
   async function stopHost() {
@@ -270,7 +286,12 @@
     if (!host) {
       return;
     }
-    await exec(`${quoteCmd(host)} --stop`);
+    const command =
+      "powershell -NoProfile -WindowStyle Hidden -Command " +
+      `Start-Process -FilePath ${quotePsSingle(host)} ` +
+      `-ArgumentList ${quotePsSingle("--stop")} ` +
+      "-WindowStyle Hidden -Wait";
+    await exec(command);
   }
 
   function parseProxy(raw) {
@@ -348,7 +369,11 @@
     await startHost();
     if (!(await pacReady(settings.httpPort, 10000))) {
       setState(STATE.Disabled);
-      throw new Error("UNM did not become ready on 127.0.0.1:" + settings.httpPort);
+      throw new Error(
+        "UNM did not become ready on 127.0.0.1:" +
+          settings.httpPort +
+          ". Sources must be UNM match-order ids (e.g. kugou,kuwo), not 127.0.0.1; leave empty for defaults. Ensure UnblockNeteaseMusic.exe is under BetterNCM data/UnblockLite/.",
+      );
     }
     await becomeRunning();
   }
@@ -405,14 +430,19 @@
     sourceLabel.textContent = "Sources ";
     const sources = document.createElement("input");
     sources.type = "text";
-    sources.placeholder = "leave empty for UNM defaults";
-    sources.value = settings.sources;
+    sources.placeholder = "empty = UNM defaults (not 127.0.0.1)";
+    // Migrate common misconfig: proxy host typed into Sources.
+    const initialSources = sanitizeSources(settings.sources).join(",");
+    if (settings.sources && initialSources !== settings.sources.trim()) {
+      writeConfig({ ...settings, sources: initialSources });
+    }
+    sources.value = initialSources;
     sourceLabel.appendChild(sources);
     root.appendChild(sourceLabel);
 
     const note = document.createElement("p");
     note.textContent =
-      "Install UnblockLite.plugin into BetterNCM plugins. Place official UNM v0.28.0 as UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/ (or next to unm-host in the extracted plugin). Closing NCM to tray keeps UNM; tray Exit reclaims it.";
+      "Install UnblockLite.plugin into BetterNCM plugins. Place official UNM v0.28.0 as UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/. Sources are UNM -o match-order ids (kugou,kuwo,migu,...), not an IP. Closing NCM to tray keeps UNM; tray Exit reclaims it.";
     root.appendChild(note);
 
     const save = document.createElement("button");
@@ -422,8 +452,9 @@
         enabled: enabledBox.checked,
         startWithNcm: startBox.checked,
         httpPort: Number(port.value) || DEFAULTS.httpPort,
-        sources: sources.value.trim(),
+        sources: sanitizeSources(sources.value).join(","),
       };
+      sources.value = next.sources;
       writeConfig(next);
       try {
         if (next.enabled) {

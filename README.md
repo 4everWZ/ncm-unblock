@@ -23,7 +23,7 @@ Requires Visual Studio 2022 Build Tools, CMake, and Ninja. The host is x64. Use 
 3. Download official UNM [v0.28.0](https://github.com/UnblockNeteaseMusic/server/releases/tag/v0.28.0) Windows x64 standalone, rename it to `UnblockNeteaseMusic.exe`, and place it at `<BetterNCM data>/UnblockLite/UnblockNeteaseMusic.exe` (typically `C:\betterncm\UnblockLite\`). The plugin also accepts `unblockneteasemusic-win-x64.exe` and a `core/` subfolder next to the extracted runtime.
 4. Restart NCM so BetterNCM extracts the plugin to `plugins_runtime\UnblockLite`. Enable it. If **Start with NCM** is on, it starts the host and writes NCM's custom HTTP proxy to `127.0.0.1:3412` when that value is not already set.
 
-V1 does not download UNM. Leave **Sources** empty unless you are overriding the pinned UNM defaults.
+V1 does not download UNM. Leave **Sources** empty unless you override UNM's match-order list with ids such as `kugou,kuwo,migu` — never put `127.0.0.1` there (that is the proxy host, set automatically).
 
 ## Package
 

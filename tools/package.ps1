@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $outputRoot = [IO.Path]::GetFullPath((Join-Path $repository 'out'))
-$packageName = 'unblock-lite-0.1.1-x64'
+$packageName = 'unblock-lite-0.1.2-x64'
 $stage = [IO.Path]::GetFullPath((Join-Path $outputRoot $packageName))
 $pluginStage = [IO.Path]::GetFullPath((Join-Path $stage 'plugin-root'))
 $pluginFile = [IO.Path]::GetFullPath((Join-Path $stage 'UnblockLite.plugin'))

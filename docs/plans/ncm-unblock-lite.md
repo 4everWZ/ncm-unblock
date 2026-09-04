@@ -13,10 +13,10 @@ Production is no longer a 2.9.7 portable launcher that starts NCM. `main` is Unb
 |---|---|---|---|
 | L0: archive and reset | Done | `ncm-2.9.7` holds the launcher line; `main` is the lite tree | Branch `ncm-2.9.7` retains the 2.9.7 launcher; `main` is UnblockLite |
 | L1: host supervisor | Done | Mutex, NCM-main attach, job-owned UNM, PAC ready, wait main/stop, reclaim | `unm-host` + `ncm_watch`; x64 focused tests passed |
-| L2: plugin | Done | Disabled/Starting/Running, exec host, PAC check, proxy write-if-needed, `--stop` | `plugin/main.js` + `manifest.json` with `ncm3-compatible`; path search covers runtime + data dir; no image-name `taskkill` |
-| L3: build/package | Done | x64 CMake, focused tests, `UnblockLite.plugin` zip without UNM | `tools/package.ps1` builds `UnblockLite.plugin` (root entries) + outer release ZIP |
-| L4: lifecycle proof | Not started | Tray hide keeps UNM; tray Exit leaves 0 host/UNM/ports | Needs NCM 2.10.12 + BetterNCM loading `.plugin` + UNM under data `UnblockLite/` |
+| L2: plugin | Done | Disabled/Starting/Running, exec host, PAC check, proxy write-if-needed, `--stop` | `plugin/main.js` + `manifest.json` with `ncm3-compatible`; path search covers runtime + data dir; PS `Start-Process` with quoted ArgumentList; Sources sanitized to UNM ids; no image-name `taskkill` |
+| L3: build/package | Done | x64 CMake, focused tests, `UnblockLite.plugin` zip without UNM | `tools/package.ps1` builds `UnblockLite.plugin` (root entries) + outer release ZIP (`0.1.2`) |
+| L4: lifecycle proof | In progress | Tray hide keeps UNM; tray Exit leaves 0 host/UNM/ports | Host attach+PAC proven on live NCM main (pid attach + `/proxy.pac` 200); tray hide/Exit residue still to confirm |
 
 ## Next action
 
-Prove start / tray hide / tray Exit on a real NCM 2.10.12 session after BetterNCM extracts `UnblockLite.plugin` and official UNM v0.28.0 is at `<data>/UnblockLite/UnblockNeteaseMusic.exe`.
+On a real NCM 2.10.12 session: clear Sources if it still shows `127.0.0.1`, Save & apply, confirm Running + PAC. Then prove tray hide keeps UNM and tray Exit leaves 0 host/UNM/ports.
