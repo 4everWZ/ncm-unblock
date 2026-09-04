@@ -75,6 +75,84 @@ void reject_embedded_nul(std::wstring_view value, const char* field) {
   }
 }
 
+[[nodiscard]] std::wstring ascii_upper(std::wstring_view value) {
+  std::wstring result(value);
+  for (auto& character : result) {
+    if (character >= L'a' && character <= L'z') {
+      character = static_cast<wchar_t>(character - L'a' + L'A');
+    }
+  }
+  return result;
+}
+
+// Build a CREATE_UNICODE_ENVIRONMENT block: NAME=VALUE\0...\0\0.
+// Starts from the current process environment and overlays overrides.
+[[nodiscard]] std::wstring build_environment_block(
+    const std::vector<std::pair<std::wstring, std::wstring>>& overrides) {
+  for (const auto& [name, value] : overrides) {
+    if (name.empty()) {
+      throw std::invalid_argument("environment variable name must not be empty");
+    }
+    reject_embedded_nul(name, "environment variable name");
+    reject_embedded_nul(value, "environment variable value");
+    if (name.find(L'=') != std::wstring_view::npos) {
+      throw std::invalid_argument("environment variable name must not contain '='");
+    }
+  }
+
+  const auto parent = GetEnvironmentStringsW();
+  if (parent == nullptr) {
+    throw_last_error("GetEnvironmentStringsW");
+  }
+  std::vector<std::pair<std::wstring, std::wstring>> entries;
+  try {
+    const wchar_t* cursor = parent;
+    while (*cursor != L'\0') {
+      const std::wstring_view entry(cursor);
+      cursor += entry.size() + 1;
+      // Skip the special "=C:=..." drive entries; still copy them as-is later
+      // by treating name as the full string when no '=' after position 0.
+      const auto separator = entry.find(L'=');
+      if (separator == std::wstring_view::npos) {
+        continue;
+      }
+      entries.emplace_back(
+          std::wstring(entry.substr(0, separator)),
+          std::wstring(entry.substr(separator + 1)));
+    }
+  } catch (...) {
+    FreeEnvironmentStringsW(parent);
+    throw;
+  }
+  FreeEnvironmentStringsW(parent);
+
+  for (const auto& [name, value] : overrides) {
+    const auto wanted = ascii_upper(name);
+    bool replaced{};
+    for (auto& entry : entries) {
+      if (ascii_upper(entry.first) == wanted) {
+        entry.first = name;
+        entry.second = value;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      entries.emplace_back(name, value);
+    }
+  }
+
+  std::wstring block;
+  for (const auto& [name, value] : entries) {
+    block.append(name);
+    block.push_back(L'=');
+    block.append(value);
+    block.push_back(L'\0');
+  }
+  block.push_back(L'\0');
+  return block;
+}
+
 [[nodiscard]] bool job_is_empty(HANDLE job) {
   JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
   if (!QueryInformationJobObject(
@@ -241,6 +319,12 @@ managed_process managed_process::prepare(const process_spec& spec) {
   const auto working_directory = spec.working_directory.empty()
       ? spec.executable.parent_path()
       : spec.working_directory;
+  std::wstring environment_block;
+  void* environment = nullptr;
+  if (!spec.environment.empty()) {
+    environment_block = build_environment_block(spec.environment);
+    environment = environment_block.data();
+  }
 
   HANDLE job = CreateJobObjectW(nullptr, nullptr);
   if (job == nullptr) {
@@ -289,7 +373,7 @@ managed_process managed_process::prepare(const process_spec& spec) {
   PROCESS_INFORMATION process{};
   if (!CreateProcessW(
           spec.executable.c_str(), command_line.data(), nullptr, nullptr,
-          startup.inherits_handles() ? TRUE : FALSE, creation_flags, nullptr,
+          startup.inherits_handles() ? TRUE : FALSE, creation_flags, environment,
           working_directory.empty() ? nullptr : working_directory.c_str(),
           startup.info(), &process)) {
     const auto status = GetLastError();

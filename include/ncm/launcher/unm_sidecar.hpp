@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ncm::launcher {
@@ -17,6 +18,8 @@ struct unm_sidecar_options {
   std::filesystem::path working_directory;
   std::optional<std::filesystem::path> output_file;
   std::vector<std::wstring> arguments;
+  // Overlay variables for the UNM process (for example SIGN_CERT / SIGN_KEY).
+  std::vector<std::pair<std::wstring, std::wstring>> environment;
   std::optional<std::uint16_t> fixed_http_port;
   std::optional<std::uint16_t> fixed_https_port;
   std::size_t maximum_automatic_attempts{3};

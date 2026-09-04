@@ -38,6 +38,17 @@ add_test(
   COMMAND unm_sidecar_tests $<TARGET_FILE:managed_process_test_child>
 )
 
+add_executable(mitm_certs_tests mitm_certs_tests.cpp)
+target_link_libraries(
+  mitm_certs_tests PRIVATE ncm_launcher_mitm_certs ncm_project_options crypt32
+)
+
+add_test(
+  NAME mitm_certs_tests
+  COMMAND mitm_certs_tests
+    "${PROJECT_SOURCE_DIR}/certs"
+)
+
 add_executable(ncm_watch_test_client ncm_watch_test_client.cpp)
 target_link_libraries(ncm_watch_test_client PRIVATE ncm_project_options)
 

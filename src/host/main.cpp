@@ -1,4 +1,5 @@
 #include "ncm/host/ncm_watch.hpp"
+#include "ncm/launcher/mitm_certs.hpp"
 #include "ncm/launcher/unm_sidecar.hpp"
 
 #include <Windows.h>
@@ -189,6 +190,22 @@ int request_stop() {
   return 0;
 }
 
+[[nodiscard]] std::filesystem::path host_module_directory() {
+  std::wstring buffer(MAX_PATH, L'\0');
+  for (;;) {
+    const auto length = GetModuleFileNameW(
+        nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (length == 0) {
+      return {};
+    }
+    if (length < buffer.size()) {
+      buffer.resize(length);
+      return std::filesystem::path(buffer).parent_path();
+    }
+    buffer.resize(buffer.size() * 2);
+  }
+}
+
 int run_supervisor(const options& settings) {
   host_log(
       "supervisor ncm=" + narrow_path(settings.ncm) +
@@ -236,6 +253,36 @@ int run_supervisor(const options& settings) {
         sidecar_options.arguments.end(), settings.sources.begin(),
         settings.sources.end());
   }
+
+  const auto host_directory = host_module_directory();
+  const auto material = ncm::launcher::resolve_mitm_material(
+      host_directory, settings.unm.parent_path());
+  if (!material.has_value()) {
+    host_log(
+        "mitm material missing; place certs/ca.crt, server.crt, server.key "
+        "next to the plugin (certs/) or beside UNM");
+    CloseHandle(stop);
+    CloseHandle(mutex);
+    return 1;
+  }
+  host_log(
+      "mitm material ca=" + narrow_path(material->ca_certificate) +
+      " leaf=" + narrow_path(material->server_certificate));
+  try {
+    const auto already_trusted =
+        ncm::launcher::current_user_root_contains(material->ca_certificate);
+    ncm::launcher::ensure_current_user_root_trust(material->ca_certificate);
+    host_log(
+        already_trusted ? "mitm CA already trusted (CurrentUser Root)"
+                        : "mitm CA installed into CurrentUser Root");
+  } catch (const std::exception& ex) {
+    host_log(std::string("mitm CA trust failed: ") + ex.what());
+    CloseHandle(stop);
+    CloseHandle(mutex);
+    return 1;
+  }
+  sidecar_options.environment =
+      ncm::launcher::mitm_sign_environment(*material);
 
   int exit_code = 0;
   try {

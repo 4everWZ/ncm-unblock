@@ -329,6 +329,15 @@ void test_output_redirection(const std::filesystem::path& child) {
           "stdout and stderr were not redirected to one append log");
 }
 
+void test_environment_overlay(const std::filesystem::path& child) {
+  auto spec = child_spec(
+      child, {L"--require-env", L"NCM_LITE_ENV_PROBE", L"overlay-value"});
+  spec.environment = {{L"NCM_LITE_ENV_PROBE", L"overlay-value"}};
+  auto process = ncm::launcher::managed_process::start(spec);
+  const auto exit = process.wait_for_root(std::chrono::seconds(5));
+  require(exit.has_value() && *exit == 0, "environment overlay was not visible to child");
+}
+
 }  // namespace
 
 int wmain(int argument_count, wchar_t** arguments) {
@@ -349,6 +358,7 @@ int wmain(int argument_count, wchar_t** arguments) {
     test_relative_path_rejected();
     test_invalid_launch_inputs_rejected(child);
     test_output_redirection(child);
+    test_environment_overlay(child);
     std::cout << "managed process tests passed\n";
     return 0;
   } catch (const std::exception& error) {

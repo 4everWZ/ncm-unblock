@@ -4,6 +4,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdlib>
 #include <cwchar>
 #include <string>
 #include <string_view>
@@ -198,6 +199,18 @@ int wmain(int argument_count, wchar_t** arguments) {
   if (argument_count == 2 && std::wstring_view(arguments[1]) == L"--require-job") {
     BOOL in_job{};
     return IsProcessInJob(GetCurrentProcess(), nullptr, &in_job) && in_job ? 0 : 125;
+  }
+  if (argument_count == 4 && std::wstring_view(arguments[1]) == L"--require-env") {
+    wchar_t* value = nullptr;
+    size_t length = 0;
+    if (_wdupenv_s(&value, &length, arguments[2]) != 0 || value == nullptr) {
+      free(value);
+      return 125;
+    }
+    const auto matched =
+        std::wstring_view(value) == std::wstring_view(arguments[3]);
+    free(value);
+    return matched ? 0 : 125;
   }
   if (argument_count == 2 && std::wstring_view(arguments[1]) == L"--spawn-child") {
     std::wstring executable(32768, L'\0');

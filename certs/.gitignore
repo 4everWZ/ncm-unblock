@@ -1,0 +1,5 @@
+ca.key
+ca.srl
+server.csr
+*.tmp
+*.cnf

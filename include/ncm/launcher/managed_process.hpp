@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ncm::launcher {
@@ -14,6 +15,9 @@ struct process_spec {
   std::filesystem::path working_directory;
   std::vector<std::wstring> arguments;
   std::optional<std::filesystem::path> output_file;
+  // When non-empty, merge these variables over the current process environment
+  // and pass a private Unicode block to CreateProcessW. Empty keeps inherit.
+  std::vector<std::pair<std::wstring, std::wstring>> environment;
   bool no_window{};
 };
 

@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $outputRoot = [IO.Path]::GetFullPath((Join-Path $repository 'out'))
-$packageName = 'unblock-lite-0.1.3-x64'
+$packageName = 'unblock-lite-0.1.4-x64'
 $stage = [IO.Path]::GetFullPath((Join-Path $outputRoot $packageName))
 $pluginStage = [IO.Path]::GetFullPath((Join-Path $stage 'plugin-root'))
 $pluginFile = [IO.Path]::GetFullPath((Join-Path $stage 'UnblockLite.plugin'))
@@ -33,6 +33,13 @@ if (-not (Test-Path -LiteralPath $hostExe)) {
     throw "Release host was not built: $hostExe"
 }
 
+foreach ($name in @('ca.crt', 'server.crt', 'server.key')) {
+    $path = Join-Path $repository ("certs\" + $name)
+    if (-not (Test-Path -LiteralPath $path)) {
+        throw "Packaged MITM material missing: $path"
+    }
+}
+
 [void](New-Item -ItemType Directory -Path $outputRoot -Force)
 if (Test-Path -LiteralPath $stage) {
     Remove-Item -LiteralPath $stage -Recurse
@@ -49,6 +56,10 @@ Copy-Item -LiteralPath (Join-Path $repository 'core\README.txt') -Destination (J
 Copy-Item -LiteralPath $hostExe -Destination (Join-Path $pluginStage 'native\unm-host.exe')
 [void](New-Item -ItemType Directory -Path (Join-Path $pluginStage 'core') -Force)
 Copy-Item -LiteralPath (Join-Path $repository 'core\README.txt') -Destination (Join-Path $pluginStage 'core\README.txt')
+[void](New-Item -ItemType Directory -Path (Join-Path $pluginStage 'certs') -Force)
+Copy-Item -LiteralPath (Join-Path $repository 'certs\ca.crt') -Destination (Join-Path $pluginStage 'certs\ca.crt')
+Copy-Item -LiteralPath (Join-Path $repository 'certs\server.crt') -Destination (Join-Path $pluginStage 'certs\server.crt')
+Copy-Item -LiteralPath (Join-Path $repository 'certs\server.key') -Destination (Join-Path $pluginStage 'certs\server.key')
 Copy-Item -LiteralPath (Join-Path $repository 'README.md') -Destination (Join-Path $stage 'README.md')
 
 # BetterNCM loads only *.plugin zip archives whose entries are rooted at the archive root.
@@ -64,6 +75,9 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
     $false)
 
 $expectedPluginEntries = @(
+    'certs/ca.crt',
+    'certs/server.crt',
+    'certs/server.key',
     'core/README.txt',
     'main.js',
     'manifest.json',
