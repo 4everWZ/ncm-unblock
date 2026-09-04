@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "name": "UnblockLite",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "author": "ncm-unblock-lite",
   "description": "Job-owned official UnblockNeteaseMusic sidecar for NCM 2.10.12.",
   "betterncm_version": ">=0.2.5",

@@ -65,6 +65,31 @@
     return `'${String(value).replace(/'/g, "''")}'`;
   }
 
+  // betterncm.app.exec strips nested quotes before powershell sees them, which
+  // splits "Program Files (x86)" paths. -EncodedCommand carries the script as
+  // base64 UTF-16LE so path quotes never traverse the outer command line.
+  function encodePsCommand(script) {
+    const text = String(script);
+    const bytes = new Uint8Array(text.length * 2);
+    for (let index = 0; index < text.length; index += 1) {
+      const code = text.charCodeAt(index);
+      bytes[index * 2] = code & 0xff;
+      bytes[index * 2 + 1] = (code >> 8) & 0xff;
+    }
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 1) {
+      binary += String.fromCharCode(bytes[index]);
+    }
+    return btoa(binary);
+  }
+
+  function runHiddenPs(script) {
+    const command =
+      "powershell -NoProfile -WindowStyle Hidden -EncodedCommand " +
+      encodePsCommand(script);
+    return exec(command);
+  }
+
   function isValidSourceName(token) {
     return /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(token);
   }
@@ -273,12 +298,11 @@
       pieces.push(`--sources ${quoteCmd(sources.join(","))}`);
     }
     const argumentList = pieces.join(" ");
-    const command =
-      "powershell -NoProfile -WindowStyle Hidden -Command " +
+    const script =
       `Start-Process -FilePath ${quotePsSingle(host)} ` +
       `-ArgumentList ${quotePsSingle(argumentList)} ` +
       "-WindowStyle Hidden";
-    await exec(command);
+    await runHiddenPs(script);
   }
 
   async function stopHost() {
@@ -286,12 +310,11 @@
     if (!host) {
       return;
     }
-    const command =
-      "powershell -NoProfile -WindowStyle Hidden -Command " +
+    const script =
       `Start-Process -FilePath ${quotePsSingle(host)} ` +
       `-ArgumentList ${quotePsSingle("--stop")} ` +
       "-WindowStyle Hidden -Wait";
-    await exec(command);
+    await runHiddenPs(script);
   }
 
   function parseProxy(raw) {
@@ -445,6 +468,11 @@
       "Install UnblockLite.plugin into BetterNCM plugins. Place official UNM v0.28.0 as UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/. Sources are UNM -o match-order ids (kugou,kuwo,migu,...), not an IP. Closing NCM to tray keeps UNM; tray Exit reclaims it.";
     root.appendChild(note);
 
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.gap = "8px";
+    actions.style.marginTop = "8px";
+
     const save = document.createElement("button");
     save.textContent = "Save & apply";
     save.onclick = async () => {
@@ -455,6 +483,7 @@
         sources: sanitizeSources(sources.value).join(","),
       };
       sources.value = next.sources;
+      enabledBox.checked = next.enabled;
       writeConfig(next);
       try {
         if (next.enabled) {
@@ -466,7 +495,22 @@
         state.textContent = String(error && error.message ? error.message : error);
       }
     };
-    root.appendChild(save);
+
+    const disable = document.createElement("button");
+    disable.textContent = "Disable";
+    disable.onclick = async () => {
+      enabledBox.checked = false;
+      try {
+        await disableAndStop();
+        state.textContent = STATE.Disabled;
+      } catch (error) {
+        state.textContent = String(error && error.message ? error.message : error);
+      }
+    };
+
+    actions.appendChild(save);
+    actions.appendChild(disable);
+    root.appendChild(actions);
     ui = { state };
   }
 

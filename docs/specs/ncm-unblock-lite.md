@@ -40,7 +40,7 @@ V1 does not download UNM or pick versions.
 
 ### Ports and sources
 
-HTTP 3412 / HTTPS 3413 by default. Occupied configured ports fail; the host does not silently pick others. Empty sources omit `-o` so the pinned UNM defaults apply. Sources are UNM match-order ids only (for example `kugou,kuwo,migu`); host addresses such as `127.0.0.1` are rejected and ignored. The plugin launches the host through PowerShell `Start-Process` with a single pre-quoted `-ArgumentList` string so paths under `Program Files` survive `betterncm.app.exec`.
+HTTP 3412 / HTTPS 3413 by default. Occupied configured ports fail; the host does not silently pick others. Empty sources omit `-o` so the pinned UNM defaults apply. Sources are UNM match-order ids only (for example `kugou,kuwo,migu`); host addresses such as `127.0.0.1` are rejected and ignored. The plugin launches the host through PowerShell `Start-Process` with a single pre-quoted `-ArgumentList` string, delivered via `-EncodedCommand` so nested quotes survive `betterncm.app.exec`. Config UI exposes Save & apply and Disable.
 
 ## Acceptance
 
