@@ -8,4 +8,4 @@ target_link_libraries(
   PRIVATE ncm_host_watch ncm_launcher_unm_sidecar ncm_project_options shell32
 )
 
-install(TARGETS unm-host RUNTIME DESTINATION UnblockLite/native COMPONENT Runtime)
+install(TARGETS unm-host RUNTIME DESTINATION native COMPONENT Runtime)

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ncm_unblock_lite VERSION 0.1.0 LANGUAGES CXX)
+project(ncm_unblock_lite VERSION 0.1.1 LANGUAGES CXX)
 
 if(NOT WIN32)
   message(FATAL_ERROR "ncm-unblock-lite currently supports Windows only")
@@ -33,16 +33,19 @@ if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
 
+# Primary distribution is tools/package.ps1 → UnblockLite.plugin (zip).
+# These install rules mirror the .plugin root layout for cmake --install consumers.
 install(FILES README.md DESTINATION . COMPONENT Runtime)
 install(
   FILES
     plugin/manifest.json
     plugin/main.js
-  DESTINATION UnblockLite
+    core/README.txt
+  DESTINATION .
   COMPONENT Runtime
 )
 install(
   FILES core/README.txt
-  DESTINATION UnblockLite/core
+  DESTINATION core
   COMPONENT Runtime
 )

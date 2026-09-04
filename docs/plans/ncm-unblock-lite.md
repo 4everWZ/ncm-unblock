@@ -13,10 +13,10 @@ Production is no longer a 2.9.7 portable launcher that starts NCM. `main` is Unb
 |---|---|---|---|
 | L0: archive and reset | Done | `ncm-2.9.7` holds the launcher line; `main` is the lite tree | Branch `ncm-2.9.7` retains the 2.9.7 launcher; `main` is UnblockLite |
 | L1: host supervisor | Done | Mutex, NCM-main attach, job-owned UNM, PAC ready, wait main/stop, reclaim | `unm-host` + `ncm_watch`; x64 focused tests passed |
-| L2: plugin | Done | Disabled/Starting/Running, exec host, PAC check, proxy write-if-needed, `--stop` | `plugin/main.js` + `manifest.json`; no image-name `taskkill` |
-| L3: build/package | Done | x64 CMake, focused tests, ZIP without UNM | `x64-debug` tests 4/4; `tools/package.ps1` lists plugin+host+notice |
-| L4: lifecycle proof | Not started | Tray hide keeps UNM; tray Exit leaves 0 host/UNM/ports | Needs NCM 2.10.12 + BetterNCM + placed UNM v0.28.0 |
+| L2: plugin | Done | Disabled/Starting/Running, exec host, PAC check, proxy write-if-needed, `--stop` | `plugin/main.js` + `manifest.json` with `ncm3-compatible`; path search covers runtime + data dir; no image-name `taskkill` |
+| L3: build/package | Done | x64 CMake, focused tests, `UnblockLite.plugin` zip without UNM | `tools/package.ps1` builds `UnblockLite.plugin` (root entries) + outer release ZIP |
+| L4: lifecycle proof | Not started | Tray hide keeps UNM; tray Exit leaves 0 host/UNM/ports | Needs NCM 2.10.12 + BetterNCM loading `.plugin` + UNM under data `UnblockLite/` |
 
 ## Next action
 
-Prove start / tray hide / tray Exit on a real NCM 2.10.12 session with BetterNCM and official UNM v0.28.0 placed at `UnblockLite/core/UnblockNeteaseMusic.exe`.
+Prove start / tray hide / tray Exit on a real NCM 2.10.12 session after BetterNCM extracts `UnblockLite.plugin` and official UNM v0.28.0 is at `<data>/UnblockLite/UnblockNeteaseMusic.exe`.

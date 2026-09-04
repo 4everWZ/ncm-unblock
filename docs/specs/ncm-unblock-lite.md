@@ -3,8 +3,8 @@
 ## Intent
 
 - **Product:** A BetterNCM v2 plugin for NetEase Cloud Music 2.10.12 plus `unm-host.exe`, a native supervisor for one official UnblockNeteaseMusic (UNM) standalone process.
-- **MVP user experience:** Install BetterNCM, drop in the plugin folder, place the pinned UNM executable, enable the plugin. The plugin sets NCM's custom HTTP proxy to `127.0.0.1:3412` when needed. Closing NCM to the tray keeps UNM; a real NCM exit leaves no host or UNM process.
-- **In scope:** Plugin UI/config/proxy/start; host mutex, NCM-main attach, Job Object UNM ownership, PAC readiness, session-end cleanup; x64 CMake build; portable plugin package without UNM.
+- **MVP user experience:** Install BetterNCM, drop in `UnblockLite.plugin` (a zip BetterNCM extracts under `plugins_runtime`), place the pinned UNM executable under the BetterNCM data directory, enable the plugin. The plugin sets NCM's custom HTTP proxy to `127.0.0.1:3412` when needed. Closing NCM to the tray keeps UNM; a real NCM exit leaves no host or UNM process.
+- **In scope:** Plugin UI/config/proxy/start; host mutex, NCM-main attach, Job Object UNM ownership, PAC readiness, session-end cleanup; x64 CMake build; `UnblockLite.plugin` package without UNM.
 - **Out of scope:** Downloaders, version pickers, rich logging, shortcut setup, launching NCM, DLL/CEF/WinMM injection, system proxy, certificate installation, `localdata` edits, Windows services, unbounded UNM restart, a RevivedUnblockInstaller fork.
 
 UNM remains the matcher. The host does not reimplement providers. Injection research stays on `research/native-injection`. The 2.9.7 launcher stays on `ncm-2.9.7`.
@@ -13,9 +13,9 @@ UNM remains the matcher. The host does not reimplement providers. Injection rese
 
 ### Components
 
-- Plugin: `manifest.json` + `main.js`. States are Disabled, Starting, Running. Config: Enabled, Sources, HTTP port 3412, Start with NCM.
+- Plugin: BetterNCM `UnblockLite.plugin` zip with root-level `manifest.json` + `main.js` (`ncm3-compatible`), plus embedded `native/unm-host.exe`. States are Disabled, Starting, Running. Config: Enabled, Sources, HTTP port 3412, Start with NCM. Host/UNM paths resolve from the extracted `pluginPath`, then `<data>/UnblockLite/`, then data root.
 - Host: `unm-host.exe`. Single-instance mutex `Local\UnblockNeteaseMusic-Lite`. Optional `--stop` through `Local\UnblockNeteaseMusic-Lite-Stop`.
-- UNM: independently placed official v0.28.0 Windows x64 standalone. Not redistributed.
+- UNM: independently placed official v0.28.0 Windows x64 standalone (preferred `UnblockNeteaseMusic.exe` under BetterNCM data `UnblockLite/`). Not redistributed.
 - NCM stays outside the UNM job.
 
 ### Host sequence
@@ -52,7 +52,7 @@ HTTP 3412 / HTTPS 3413 by default. Occupied configured ports fail; the host does
 | Tray hide keeps host+UNM; tray Exit leaves zero host/UNM/port residue | Exact-client lifecycle run |
 | Host kill reclaims the UNM tree and does not kill NCM | Job-close and owner-kill tests |
 | Plugin does not `taskkill` by image name | Source inspection |
-| Package has plugin + host + core notice, not UNM | `tools/package.ps1` manifest |
+| Package ships `UnblockLite.plugin` (zip) + README, not a loose folder or UNM | `tools/package.ps1` manifest |
 
 ## Deferred
 

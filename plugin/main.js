@@ -13,6 +13,7 @@
   };
 
   const PROXY_HOST = "127.0.0.1";
+  const PLUGIN_NAME = "UnblockLite";
   let currentState = STATE.Disabled;
   let ui = null;
 
@@ -48,19 +49,9 @@
     plugin.setConfig("sources", next.sources);
   }
 
-  function pluginRoot() {
-    if (plugin && plugin.pluginPath) {
-      return String(plugin.pluginPath);
-    }
-    if (typeof loadedPlugins !== "undefined" && loadedPlugins.UnblockLite) {
-      return String(loadedPlugins.UnblockLite.pluginPath || "");
-    }
-    return "";
-  }
-
   function joinPath(...parts) {
     return parts
-      .filter(Boolean)
+      .filter((part) => part !== undefined && part !== null && String(part).length > 0)
       .join("\\")
       .replace(/[\\/]+/g, "\\");
   }
@@ -69,19 +60,65 @@
     return `"${String(value).replace(/"/g, '\\"')}"`;
   }
 
-  function nativePaths() {
-    const root = pluginRoot();
-    return {
-      host: joinPath(root, "native", "unm-host.exe"),
-      unmCandidates: [
-        joinPath(root, "core", "UnblockNeteaseMusic.exe"),
-        joinPath(root, "core", "unblockneteasemusic-win-x64.exe"),
-      ],
-    };
+  function normalizeDir(path) {
+    return String(path || "")
+      .replace(/[\\/]+$/g, "")
+      .replace(/\//g, "\\");
+  }
+
+  function pluginRuntimeRoot() {
+    if (plugin && plugin.pluginPath) {
+      return normalizeDir(plugin.pluginPath);
+    }
+    if (typeof loadedPlugins !== "undefined" && loadedPlugins[PLUGIN_NAME]) {
+      return normalizeDir(loadedPlugins[PLUGIN_NAME].pluginPath || "");
+    }
+    return "";
+  }
+
+  async function dataRoot() {
+    try {
+      if (betterncm && betterncm.app && typeof betterncm.app.getDataPath === "function") {
+        return normalizeDir(await betterncm.app.getDataPath());
+      }
+    } catch (_) {
+      /* fall through */
+    }
+    return "";
+  }
+
+  async function searchRoots() {
+    const roots = [];
+    const runtime = pluginRuntimeRoot();
+    if (runtime) {
+      roots.push(runtime);
+    }
+    const data = await dataRoot();
+    if (data) {
+      roots.push(joinPath(data, PLUGIN_NAME));
+      roots.push(data);
+    }
+    // Relative paths accepted by betterncm.fs / native helpers (Revived style).
+    roots.push(`./${PLUGIN_NAME}`);
+    roots.push(".");
+    return roots;
   }
 
   async function fileExists(path) {
     if (!path) return false;
+    try {
+      if (
+        typeof betterncm_native !== "undefined" &&
+        betterncm_native.fs &&
+        typeof betterncm_native.fs.exists === "function"
+      ) {
+        if (betterncm_native.fs.exists(path)) {
+          return true;
+        }
+      }
+    } catch (_) {
+      /* fall through */
+    }
     try {
       if (betterncm && betterncm.fs && typeof betterncm.fs.exists === "function") {
         return Boolean(await betterncm.fs.exists(path));
@@ -92,14 +129,42 @@
     return false;
   }
 
-  async function resolveUnm() {
-    const { unmCandidates } = nativePaths();
-    for (const candidate of unmCandidates) {
+  async function firstExisting(candidates) {
+    for (const candidate of candidates) {
       if (await fileExists(candidate)) {
         return candidate;
       }
     }
-    return unmCandidates[0];
+    return "";
+  }
+
+  async function resolveHost() {
+    const roots = await searchRoots();
+    const names = ["unm-host.exe", joinPath("native", "unm-host.exe")];
+    const candidates = [];
+    for (const root of roots) {
+      for (const name of names) {
+        candidates.push(joinPath(root, name));
+      }
+    }
+    return firstExisting(candidates);
+  }
+
+  async function resolveUnm() {
+    const roots = await searchRoots();
+    const names = [
+      "UnblockNeteaseMusic.exe",
+      "unblockneteasemusic-win-x64.exe",
+      joinPath("core", "UnblockNeteaseMusic.exe"),
+      joinPath("core", "unblockneteasemusic-win-x64.exe"),
+    ];
+    const candidates = [];
+    for (const root of roots) {
+      for (const name of names) {
+        candidates.push(joinPath(root, name));
+      }
+    }
+    return firstExisting(candidates);
   }
 
   async function ncmExecutable() {
@@ -153,18 +218,36 @@
     return betterncm.app.exec(command, false, false);
   }
 
-  function hostCommand(args) {
-    const { host } = nativePaths();
+  async function absoluteForExec(path) {
+    const text = String(path || "");
+    if (!text) {
+      return "";
+    }
+    if (/^[A-Za-z]:[\\/]/.test(text) || text.startsWith("\\\\")) {
+      return text;
+    }
+    const data = await dataRoot();
+    if (!data) {
+      return text;
+    }
+    const relative = text.replace(/^\.[\\/]/, "");
+    return joinPath(data, relative);
+  }
+
+  async function hostCommand(args) {
+    const host = await absoluteForExec(await resolveHost());
     return `cmd /c start "" /b ${quoteCmd(host)} ${args}`;
   }
 
   async function startHost() {
     const settings = configOf();
     const ncm = await ncmExecutable();
-    const unm = await resolveUnm();
-    const { host } = nativePaths();
-    if (!(await fileExists(host)) || !(await fileExists(unm)) || !ncm) {
-      throw new Error("unm-host.exe, UNM executable, or NCM path is missing");
+    const unm = await absoluteForExec(await resolveUnm());
+    const host = await absoluteForExec(await resolveHost());
+    if (!host || !unm || !ncm) {
+      throw new Error(
+        "Missing unm-host.exe, UNM executable, or NCM path. Put UNM at BetterNCM data/UnblockLite/UnblockNeteaseMusic.exe",
+      );
     }
     const pieces = [
       `--ncm ${quoteCmd(ncm)}`,
@@ -179,12 +262,12 @@
     if (sources.length > 0) {
       pieces.push(`--sources ${quoteCmd(sources.join(","))}`);
     }
-    await exec(hostCommand(pieces.join(" ")));
+    await exec(await hostCommand(pieces.join(" ")));
   }
 
   async function stopHost() {
-    const { host } = nativePaths();
-    if (!(await fileExists(host))) {
+    const host = await absoluteForExec(await resolveHost());
+    if (!host) {
       return;
     }
     await exec(`${quoteCmd(host)} --stop`);
@@ -329,7 +412,7 @@
 
     const note = document.createElement("p");
     note.textContent =
-      "Place official UNM v0.28.0 at core/UnblockNeteaseMusic.exe. Closing NCM to tray keeps UNM; tray Exit reclaims it.";
+      "Install UnblockLite.plugin into BetterNCM plugins. Place official UNM v0.28.0 as UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/ (or next to unm-host in the extracted plugin). Closing NCM to tray keeps UNM; tray Exit reclaims it.";
     root.appendChild(note);
 
     const save = document.createElement("button");

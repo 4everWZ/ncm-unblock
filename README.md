@@ -19,9 +19,9 @@ Requires Visual Studio 2022 Build Tools, CMake, and Ninja. The host is x64. Use 
 ## First use
 
 1. Install NCM 2.10.12 and BetterNCM v2.
-2. Copy the `UnblockLite` folder from a release (or a staged `out/` package) into BetterNCM's plugins directory.
-3. Download official UNM [v0.28.0](https://github.com/UnblockNeteaseMusic/server/releases/tag/v0.28.0) Windows x64 standalone, rename it to `UnblockNeteaseMusic.exe`, and place it at `UnblockLite/core/UnblockNeteaseMusic.exe`.
-4. Enable the plugin. If **Start with NCM** is on, it starts the host and writes NCM's custom HTTP proxy to `127.0.0.1:3412` when that value is not already set.
+2. Drop `UnblockLite.plugin` from a release (or `out/unblock-lite-*-x64/`) into BetterNCM's `plugins` directory. BetterNCM only loads `*.plugin` zip archives; a loose folder is ignored.
+3. Download official UNM [v0.28.0](https://github.com/UnblockNeteaseMusic/server/releases/tag/v0.28.0) Windows x64 standalone, rename it to `UnblockNeteaseMusic.exe`, and place it at `<BetterNCM data>/UnblockLite/UnblockNeteaseMusic.exe` (typically `C:\betterncm\UnblockLite\`). The plugin also accepts `unblockneteasemusic-win-x64.exe` and a `core/` subfolder next to the extracted runtime.
+4. Restart NCM so BetterNCM extracts the plugin to `plugins_runtime\UnblockLite`. Enable it. If **Start with NCM** is on, it starts the host and writes NCM's custom HTTP proxy to `127.0.0.1:3412` when that value is not already set.
 
 V1 does not download UNM. Leave **Sources** empty unless you are overriding the pinned UNM defaults.
 
@@ -31,4 +31,4 @@ V1 does not download UNM. Leave **Sources** empty unless you are overriding the 
 ./tools/package.ps1
 ```
 
-The ZIP under `out/` contains the plugin, `unm-host.exe`, and a `core/` placement notice. It does not redistribute UNM.
+The ZIP under `out/` contains `UnblockLite.plugin` (manifest, `main.js`, embedded `native/unm-host.exe`, placement notice) and `README.md`. It does not redistribute UNM.
