@@ -68,6 +68,12 @@ $newTryMatch = @(
     't'
 ) -join ''
 
+# LOCAL_VIP expireTime: upstream uses now+1y on every response. That makes
+# vip/info membership fields change on each username-menu fetch; NCM 2.10.12
+# then force-refreshes the shell after the dropdown opens. Day-bucket the base.
+$oldVipExpire = 'let i=(t.data.now||new Date().getTime())+316224e5'
+$newVipExpire = 'let i=Math.floor((t.data.now||new Date().getTime())/864e5)*864e5+316224e5'
+
 $text = [IO.File]::ReadAllText($upstream)
 if ($text.IndexOf($oldBr) -lt 0) {
     throw 'Upstream bitrate inject block not found; adjust vendor-unm-app.ps1 for this tag.'
@@ -78,8 +84,11 @@ if ($text.IndexOf($oldLevel) -lt 0) {
 if ($text.IndexOf($oldTryMatch) -lt 0) {
     throw 'Upstream tryMatch URL body block not found; adjust vendor-unm-app.ps1 for this tag.'
 }
+if ($text.IndexOf($oldVipExpire) -lt 0) {
+    throw 'Upstream LOCAL_VIP expireTime expression not found; adjust vendor-unm-app.ps1 for this tag.'
+}
 
-$out = $text.Replace($oldBr, $newBr).Replace($oldLevel, $newLevel).Replace($oldTryMatch, $newTryMatch)
+$out = $text.Replace($oldBr, $newBr).Replace($oldLevel, $newLevel).Replace($oldTryMatch, $newTryMatch).Replace($oldVipExpire, $newVipExpire)
 if ($out.IndexOf('plLevel"in t&&"lossless"!==t.plLevel') -lt 0) {
     throw 'Privilege lossless patch did not apply.'
 }
@@ -88,6 +97,9 @@ if ($out.IndexOf('("plLevel"in t||"playMaxbr"in t||"downloadMaxbr"in t||"maxbr"i
 }
 if ($out.IndexOf('e.level=999e3===e.br') -lt 0) {
     throw 'tryMatch level/encodeType patch did not apply.'
+}
+if ($out.IndexOf('Math.floor((t.data.now||new Date().getTime())/864e5)*864e5+316224e5') -lt 0) {
+    throw 'LOCAL_VIP day-stable expireTime patch did not apply.'
 }
 
 [IO.File]::WriteAllText($patched, $out)

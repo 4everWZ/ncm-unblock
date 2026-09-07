@@ -42,6 +42,12 @@ When `ENABLE_FLAC=true` (UnblockLite host always overlays this):
   fields on every JSON node during `JSON.stringify` walk, which polluted
   `vip/info` and other roots and could make the PC username control full-refresh
   the page before opening the dropdown.)
+- Stabilize `ENABLE_LOCAL_VIP` membership `expireTime`: upstream sets
+  `expireTime = now + 1y` on every `vip/info` response. That drifts
+  millisecond-by-millisecond, so each username-menu open sees a new membership
+  payload and NCM 2.10.12 force-refreshes the shell after the dropdown appears.
+  UnblockLite day-buckets the base clock (`floor(now/864e5)*864e5 + 1y`) so
+  expire fields are stable within a UTC day while still showing ~1 year left.
 - In `tryMatch` URL bodies, set `level` from the matched `br`/`type` (FLAC →
   `lossless`) and `encodeType` from `type`. Upstream left both `null`, which is
   enough for some clients to keep the player quality chip on「标准」even when
