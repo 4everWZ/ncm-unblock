@@ -217,7 +217,11 @@
 
   async function resolveUnm() {
     const roots = await searchRoots();
+    // Prefer bundled patched UNM JS (privilege levels → lossless); host runs it
+    // via system node. Official pkg exe remains the fallback when JS is absent.
     const names = [
+      joinPath("core", "unm-app.js"),
+      "unm-app.js",
       "UnblockNeteaseMusic.exe",
       "unblockneteasemusic-win-x64.exe",
       joinPath("core", "UnblockNeteaseMusic.exe"),
@@ -306,7 +310,7 @@
     const host = await absoluteForExec(await resolveHost());
     if (!host || !unm || !ncm) {
       throw new Error(
-        "Missing unm-host.exe, UNM executable, or NCM path. Put UNM at BetterNCM data/UnblockLite/UnblockNeteaseMusic.exe",
+        "Missing unm-host.exe, UNM matcher, or NCM path. Bundled core/unm-app.js needs Node 18+ on PATH (or nvm); else place official UNM at BetterNCM data/UnblockLite/UnblockNeteaseMusic.exe",
       );
     }
     // PS5 Start-Process joins ArgumentList arrays with spaces and does NOT
@@ -417,7 +421,7 @@
       throw new Error(
         "UNM did not become ready on 127.0.0.1:" +
           settings.httpPort +
-          ". Sources must be UNM match-order ids (e.g. bodian,migu,kugou), not 127.0.0.1; leave empty for product default bodian,migu,kugou. Ensure UnblockNeteaseMusic.exe is under BetterNCM data/UnblockLite/.",
+          ". Sources must be UNM match-order ids (e.g. bodian,migu,kugou), not 127.0.0.1; leave empty for product default bodian,migu,kugou. Bundled core/unm-app.js needs Node 18+ on PATH; else place UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/.",
       );
     }
     await becomeRunning();
@@ -488,7 +492,7 @@
 
     const note = document.createElement("p");
     note.textContent =
-      "Install UnblockLite.plugin into BetterNCM plugins. Place official UNM v0.28.0 as UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/. Sources are UNM -o match-order ids (default bodian,migu,kugou), not an IP. Host always enables ENABLE_FLAC and follows Sources order. Closing NCM to tray keeps UNM; tray Exit reclaims it.";
+      "Install UnblockLite.plugin into BetterNCM plugins. Default matcher is bundled core/unm-app.js (patched UNM JS; needs Node 18+ on PATH or nvm). Official UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/ is still accepted as fallback. Sources are UNM -o match-order ids (default bodian,migu,kugou), not an IP. Host always enables ENABLE_FLAC, follows Sources order, and overlays local SVIP. Closing NCM to tray keeps UNM; tray Exit reclaims it.";
     root.appendChild(note);
 
     const actions = document.createElement("div");

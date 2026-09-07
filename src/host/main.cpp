@@ -210,6 +210,89 @@ int request_stop() {
   }
 }
 
+[[nodiscard]] bool path_has_extension(
+    const std::filesystem::path& path, std::wstring_view extension) {
+  auto actual = path.extension().wstring();
+  if (actual.size() != extension.size()) {
+    return false;
+  }
+  for (std::size_t index = 0; index < actual.size(); ++index) {
+    const auto left = actual[index];
+    const auto right = extension[index];
+    const auto fold = [](wchar_t value) {
+      return (value >= L'A' && value <= L'Z')
+          ? static_cast<wchar_t>(value - L'A' + L'a')
+          : value;
+    };
+    if (fold(left) != fold(right)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] std::optional<std::filesystem::path> resolve_node_binary() {
+  wchar_t override_buffer[MAX_PATH]{};
+  const auto override_length = GetEnvironmentVariableW(
+      L"NODE_BINARY", override_buffer, MAX_PATH);
+  if (override_length > 0 && override_length < MAX_PATH) {
+    std::error_code code;
+    const std::filesystem::path candidate(override_buffer);
+    if (std::filesystem::is_regular_file(candidate, code) && !code) {
+      return candidate.lexically_normal();
+    }
+    host_log(
+        "NODE_BINARY set but not a regular file: " + narrow_path(candidate));
+  }
+
+  wchar_t found[MAX_PATH]{};
+  const auto length = SearchPathW(nullptr, L"node.exe", nullptr, MAX_PATH, found, nullptr);
+  if (length > 0 && length < MAX_PATH) {
+    return std::filesystem::path(found).lexically_normal();
+  }
+
+  // Common nvm-windows default install (optional fallback; PATH is preferred).
+  const std::filesystem::path nvm_default = L"C:\\nvm4w\\nodejs\\node.exe";
+  std::error_code code;
+  if (std::filesystem::is_regular_file(nvm_default, code) && !code) {
+    return nvm_default.lexically_normal();
+  }
+  return std::nullopt;
+}
+
+struct unm_launch_target {
+  std::filesystem::path executable;
+  std::filesystem::path working_directory;
+  std::vector<std::wstring> prefix_arguments;
+  bool js_mode{};
+};
+
+[[nodiscard]] std::optional<unm_launch_target> resolve_unm_launch_target(
+    const std::filesystem::path& unm) {
+  unm_launch_target target;
+  target.working_directory = unm.parent_path();
+  if (path_has_extension(unm, L".js")) {
+    const auto node = resolve_node_binary();
+    if (!node.has_value()) {
+      host_log(
+          "UNM entry is .js but node.exe was not found on PATH, NODE_BINARY, "
+          "or C:\\nvm4w\\nodejs\\node.exe");
+      return std::nullopt;
+    }
+    target.executable = *node;
+    target.prefix_arguments = {unm.wstring()};
+    target.js_mode = true;
+    host_log(
+        "unm mode=js node=" + narrow_path(*node) +
+        " app=" + narrow_path(unm));
+    return target;
+  }
+  target.executable = unm;
+  target.js_mode = false;
+  host_log("unm mode=exe path=" + narrow_path(unm));
+  return target;
+}
+
 int run_supervisor(const options& settings) {
   host_log(
       "supervisor ncm=" + narrow_path(settings.ncm) +
@@ -245,12 +328,20 @@ int run_supervisor(const options& settings) {
   }
   host_log("attach ok pid=" + std::to_string(session->process_id()));
 
+  const auto launch = resolve_unm_launch_target(settings.unm);
+  if (!launch.has_value()) {
+    CloseHandle(stop);
+    CloseHandle(mutex);
+    return 1;
+  }
+
   ncm::launcher::unm_sidecar_options sidecar_options;
-  sidecar_options.executable = settings.unm;
-  sidecar_options.working_directory = settings.unm.parent_path();
+  sidecar_options.executable = launch->executable;
+  sidecar_options.working_directory = launch->working_directory;
   sidecar_options.fixed_http_port = settings.http_port;
   sidecar_options.fixed_https_port = settings.https_port;
   sidecar_options.readiness_timeout = std::chrono::seconds(10);
+  sidecar_options.arguments = launch->prefix_arguments;
   sidecar_options.arguments.emplace_back(L"-o");
   if (!settings.sources.empty()) {
     sidecar_options.arguments.insert(
@@ -263,6 +354,8 @@ int run_supervisor(const options& settings) {
   }
 
   const auto host_directory = host_module_directory();
+  // Prefer plugin certs (host lives under native/); UNM parent is core/ or
+  // user data dir — still accepted as secondary root.
   const auto material = ncm::launcher::resolve_mitm_material(
       host_directory, settings.unm.parent_path());
   if (!material.has_value()) {
@@ -293,6 +386,9 @@ int run_supervisor(const options& settings) {
       ncm::launcher::mitm_sign_environment(*material);
   sidecar_options.environment.emplace_back(L"ENABLE_FLAC", L"true");
   sidecar_options.environment.emplace_back(L"FOLLOW_SOURCE_ORDER", L"true");
+  // UNM hook: local red+/SVIP membership on vip/info when NCM is logged in.
+  // Privilege level floors (plLevel→lossless) come from the patched JS bundle.
+  sidecar_options.environment.emplace_back(L"ENABLE_LOCAL_VIP", L"svip");
 
   int exit_code = 0;
   try {

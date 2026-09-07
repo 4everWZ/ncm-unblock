@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $outputRoot = [IO.Path]::GetFullPath((Join-Path $repository 'out'))
-$packageName = 'unblock-lite-0.1.7-x64'
+$packageName = 'unblock-lite-0.1.9-x64'
 $stage = [IO.Path]::GetFullPath((Join-Path $outputRoot $packageName))
 $pluginStage = [IO.Path]::GetFullPath((Join-Path $stage 'plugin-root'))
 $pluginFile = [IO.Path]::GetFullPath((Join-Path $stage 'UnblockLite.plugin'))
@@ -40,6 +40,11 @@ foreach ($name in @('ca.crt', 'server.crt', 'server.key')) {
     }
 }
 
+$unmAppJs = Join-Path $repository 'core\unm-app.js'
+if (-not (Test-Path -LiteralPath $unmAppJs)) {
+    throw "Packaged UNM JS matcher missing: $unmAppJs (run tools/vendor-unm-app.ps1)"
+}
+
 [void](New-Item -ItemType Directory -Path $outputRoot -Force)
 if (Test-Path -LiteralPath $stage) {
     Remove-Item -LiteralPath $stage -Recurse
@@ -56,6 +61,8 @@ Copy-Item -LiteralPath (Join-Path $repository 'core\README.txt') -Destination (J
 Copy-Item -LiteralPath $hostExe -Destination (Join-Path $pluginStage 'native\unm-host.exe')
 [void](New-Item -ItemType Directory -Path (Join-Path $pluginStage 'core') -Force)
 Copy-Item -LiteralPath (Join-Path $repository 'core\README.txt') -Destination (Join-Path $pluginStage 'core\README.txt')
+Copy-Item -LiteralPath $unmAppJs -Destination (Join-Path $pluginStage 'core\unm-app.js')
+Copy-Item -LiteralPath (Join-Path $repository 'third_party\unm\NOTICE.md') -Destination (Join-Path $pluginStage 'core\NOTICE.md')
 [void](New-Item -ItemType Directory -Path (Join-Path $pluginStage 'certs') -Force)
 Copy-Item -LiteralPath (Join-Path $repository 'certs\ca.crt') -Destination (Join-Path $pluginStage 'certs\ca.crt')
 Copy-Item -LiteralPath (Join-Path $repository 'certs\server.crt') -Destination (Join-Path $pluginStage 'certs\server.crt')
@@ -78,7 +85,9 @@ $expectedPluginEntries = @(
     'certs/ca.crt',
     'certs/server.crt',
     'certs/server.key',
+    'core/NOTICE.md',
     'core/README.txt',
+    'core/unm-app.js',
     'main.js',
     'manifest.json',
     'native/unm-host.exe',
