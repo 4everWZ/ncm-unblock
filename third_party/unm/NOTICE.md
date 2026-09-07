@@ -36,7 +36,12 @@ When `ENABLE_FLAC=true` (UnblockLite host always overlays this):
 - Raise `plLevel` / `dlLevel` / `flLevel` to `lossless` when present and not
   already `lossless` (not only when `none`).
 - Set `playMaxLevel`, `downloadMaxLevel`, `maxBrLevel`, `playMaxBrLevel`, and
-  `downloadMaxBrLevel` to `lossless`; floor `maxbr` to `999000` when present and lower.
+  `downloadMaxBrLevel` to `lossless` **only on privilege-shaped objects** that
+  already carry `plLevel` / `playMaxbr` / `downloadMaxbr` / `maxbr`. Floor
+  `maxbr` to `999000` when present and lower. (0.1.10 wrote the max-level
+  fields on every JSON node during `JSON.stringify` walk, which polluted
+  `vip/info` and other roots and could make the PC username control full-refresh
+  the page before opening the dropdown.)
 - In `tryMatch` URL bodies, set `level` from the matched `br`/`type` (FLAC →
   `lossless`) and `encodeType` from `type`. Upstream left both `null`, which is
   enough for some clients to keep the player quality chip on「标准」even when

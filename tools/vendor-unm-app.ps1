@@ -41,16 +41,15 @@ $oldLevel = @(
     '"dlLevel"in t&&"none"===t.dlLevel&&(t.dlLevel="exhigh")'
 ) -join ''
 
+# Gate allied max-level writes to privilege-shaped objects only. Unconditional
+# assigns ran on every JSON node (JSON.stringify walker), polluting vip/info,
+# song roots, etc. with playMaxLevel — enough for PC username menu to full-refresh.
 $newLevel = @(
     '("true"===(process.env.ENABLE_FLAC||"").toLowerCase()?',
     '("flLevel"in t&&"lossless"!==t.flLevel&&(t.flLevel="lossless"),',
     '"plLevel"in t&&"lossless"!==t.plLevel&&(t.plLevel="lossless"),',
     '"dlLevel"in t&&"lossless"!==t.dlLevel&&(t.dlLevel="lossless"),',
-    't.playMaxLevel="lossless",',
-    't.downloadMaxLevel="lossless",',
-    't.maxBrLevel="lossless",',
-    't.playMaxBrLevel="lossless",',
-    't.downloadMaxBrLevel="lossless",',
+    '("plLevel"in t||"playMaxbr"in t||"downloadMaxbr"in t||"maxbr"in t)&&(t.playMaxLevel="lossless",t.downloadMaxLevel="lossless",t.maxBrLevel="lossless",t.playMaxBrLevel="lossless",t.downloadMaxBrLevel="lossless"),',
     '"maxbr"in t&&t.maxbr<999e3&&(t.maxbr=999e3)):',
     '("flLevel"in t&&"none"===t.flLevel&&(t.flLevel="exhigh"),',
     '"plLevel"in t&&"none"===t.plLevel&&(t.plLevel="exhigh"),',
@@ -83,6 +82,9 @@ if ($text.IndexOf($oldTryMatch) -lt 0) {
 $out = $text.Replace($oldBr, $newBr).Replace($oldLevel, $newLevel).Replace($oldTryMatch, $newTryMatch)
 if ($out.IndexOf('plLevel"in t&&"lossless"!==t.plLevel') -lt 0) {
     throw 'Privilege lossless patch did not apply.'
+}
+if ($out.IndexOf('("plLevel"in t||"playMaxbr"in t||"downloadMaxbr"in t||"maxbr"in t)&&') -lt 0) {
+    throw 'Gated playMaxLevel patch did not apply.'
 }
 if ($out.IndexOf('e.level=999e3===e.br') -lt 0) {
     throw 'tryMatch level/encodeType patch did not apply.'
