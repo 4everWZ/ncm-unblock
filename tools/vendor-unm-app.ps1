@@ -48,10 +48,25 @@ $newLevel = @(
     '"dlLevel"in t&&"lossless"!==t.dlLevel&&(t.dlLevel="lossless"),',
     't.playMaxLevel="lossless",',
     't.downloadMaxLevel="lossless",',
-    't.maxBrLevel="lossless"):',
+    't.maxBrLevel="lossless",',
+    't.playMaxBrLevel="lossless",',
+    't.downloadMaxBrLevel="lossless",',
+    '"maxbr"in t&&t.maxbr<999e3&&(t.maxbr=999e3)):',
     '("flLevel"in t&&"none"===t.flLevel&&(t.flLevel="exhigh"),',
     '"plLevel"in t&&"none"===t.plLevel&&(t.plLevel="exhigh"),',
     '"dlLevel"in t&&"none"===t.dlLevel&&(t.dlLevel="exhigh")))'
+) -join ''
+
+# tryMatch URL body: PC quality chip reads data[].level / encodeType, which stay null upstream.
+$oldTryMatch = 'e.br=t.br||128e3,e.size=t.size,e.code=200,e.freeTrialInfo=null,t'
+$newTryMatch = @(
+    'e.br=t.br||128e3,',
+    'e.size=t.size,',
+    'e.code=200,',
+    'e.freeTrialInfo=null,',
+    'e.level=999e3===e.br||"flac"===e.type?"lossless":320e3<=e.br?"exhigh":192e3<=e.br?"higher":"standard",',
+    'e.encodeType=e.type||"mp3",',
+    't'
 ) -join ''
 
 $text = [IO.File]::ReadAllText($upstream)
@@ -61,10 +76,16 @@ if ($text.IndexOf($oldBr) -lt 0) {
 if ($text.IndexOf($oldLevel) -lt 0) {
     throw 'Upstream level inject block not found; adjust vendor-unm-app.ps1 for this tag.'
 }
+if ($text.IndexOf($oldTryMatch) -lt 0) {
+    throw 'Upstream tryMatch URL body block not found; adjust vendor-unm-app.ps1 for this tag.'
+}
 
-$out = $text.Replace($oldBr, $newBr).Replace($oldLevel, $newLevel)
+$out = $text.Replace($oldBr, $newBr).Replace($oldLevel, $newLevel).Replace($oldTryMatch, $newTryMatch)
 if ($out.IndexOf('plLevel"in t&&"lossless"!==t.plLevel') -lt 0) {
     throw 'Privilege lossless patch did not apply.'
+}
+if ($out.IndexOf('e.level=999e3===e.br') -lt 0) {
+    throw 'tryMatch level/encodeType patch did not apply.'
 }
 
 [IO.File]::WriteAllText($patched, $out)

@@ -35,12 +35,18 @@ When `ENABLE_FLAC=true` (UnblockLite host always overlays this):
   keep `pl` / `dl` ≥ those max fields (same pattern as upstream).
 - Raise `plLevel` / `dlLevel` / `flLevel` to `lossless` when present and not
   already `lossless` (not only when `none`).
-- Set `playMaxLevel`, `downloadMaxLevel`, and `maxBrLevel` to `lossless`.
+- Set `playMaxLevel`, `downloadMaxLevel`, `maxBrLevel`, `playMaxBrLevel`, and
+  `downloadMaxBrLevel` to `lossless`; floor `maxbr` to `999000` when present and lower.
+- In `tryMatch` URL bodies, set `level` from the matched `br`/`type` (FLAC →
+  `lossless`) and `encodeType` from `type`. Upstream left both `null`, which is
+  enough for some clients to keep the player quality chip on「标准」even when
+  privilege APIs already report lossless and audio is FLAC.
 
 When `ENABLE_FLAC` is not true, upstream `none`→`exhigh` / `0`→`320000`
-behavior is preserved.
+behavior is preserved; tryMatch still fills `level`/`encodeType` from the
+matched stream.
 
-Providers, matching, and URL `tryMatch` behavior are unchanged.
+Providers and matching order are unchanged.
 
 ## Rebuild
 
