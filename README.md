@@ -25,7 +25,7 @@ Requires Visual Studio 2022 Build Tools, CMake, and Ninja. The host is x64. Use 
 
 The plugin ships a private CA (`certs/ca.crt`) and a leaf for `*.music.163.com`. On first successful host start the CA is installed into the **Current User** trusted Root store so NCM can accept UNM's HTTPS interception. Windows may show a security prompt the first time that store write happens. The CA private key is not shipped.
 
-V1 does not download UNM. Leave **Sources** empty unless you override UNM's match-order list with ids such as `kugou,kuwo,migu` — never put `127.0.0.1` there (that is the proxy host, set automatically).
+V1 does not download UNM. Leave **Sources** empty for the product default match order `migu,kuwo,kugou` (~320k-oriented; FLAC attempted when a source supports it). Override with other UNM match-order ids only when you need a different order — never put `127.0.0.1` there (that is the proxy host, set automatically).
 
 ## Package
 

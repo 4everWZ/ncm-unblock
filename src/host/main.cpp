@@ -21,6 +21,8 @@ constexpr wchar_t k_mutex_name[] = L"Local\\UnblockNeteaseMusic-Lite";
 constexpr wchar_t k_stop_name[] = L"Local\\UnblockNeteaseMusic-Lite-Stop";
 constexpr std::uint16_t k_default_http = 3412;
 constexpr std::uint16_t k_default_https = 3413;
+// Product match-order default: avoid qq-first M500 (~128k) without QQ_COOKIE.
+constexpr std::wstring_view k_default_sources[] = {L"migu", L"kuwo", L"kugou"};
 
 void host_log(const std::string& message) {
   wchar_t temp_directory[MAX_PATH]{};
@@ -247,11 +249,15 @@ int run_supervisor(const options& settings) {
   sidecar_options.fixed_http_port = settings.http_port;
   sidecar_options.fixed_https_port = settings.https_port;
   sidecar_options.readiness_timeout = std::chrono::seconds(10);
+  sidecar_options.arguments.emplace_back(L"-o");
   if (!settings.sources.empty()) {
-    sidecar_options.arguments.emplace_back(L"-o");
     sidecar_options.arguments.insert(
         sidecar_options.arguments.end(), settings.sources.begin(),
         settings.sources.end());
+  } else {
+    for (const auto source : k_default_sources) {
+      sidecar_options.arguments.emplace_back(source);
+    }
   }
 
   const auto host_directory = host_module_directory();
@@ -283,6 +289,7 @@ int run_supervisor(const options& settings) {
   }
   sidecar_options.environment =
       ncm::launcher::mitm_sign_environment(*material);
+  sidecar_options.environment.emplace_back(L"ENABLE_FLAC", L"true");
 
   int exit_code = 0;
   try {
