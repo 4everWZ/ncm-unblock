@@ -3,7 +3,7 @@
     enabled: true,
     startWithNcm: true,
     httpPort: 3412,
-    sources: "migu,bodian,kugou",
+    sources: "bodian,migu,kugou",
   };
 
   // When Sources is blank after sanitize, use product default (host also applies this).
@@ -37,9 +37,13 @@
       return fallback;
     };
     const httpPort = Number(read("httpPort", DEFAULTS.httpPort));
-    // Migrate previous product default that still includes broken anonymous kuwo.
+    // Migrate prior product defaults: kuwo interstitial, or migu-first (slow under FOLLOW).
     let sources = String(read("sources", DEFAULTS.sources) || "");
-    if (sanitizeSources(sources).join(",") === "migu,kuwo,kugou") {
+    const sanitizedStored = sanitizeSources(sources).join(",");
+    if (
+      sanitizedStored === "migu,kuwo,kugou" ||
+      sanitizedStored === "migu,bodian,kugou"
+    ) {
       sources = DEFAULTS.sources;
       try {
         if (plugin && typeof plugin.setConfig === "function") {
@@ -413,7 +417,7 @@
       throw new Error(
         "UNM did not become ready on 127.0.0.1:" +
           settings.httpPort +
-          ". Sources must be UNM match-order ids (e.g. migu,bodian,kugou), not 127.0.0.1; leave empty for product default migu,bodian,kugou. Ensure UnblockNeteaseMusic.exe is under BetterNCM data/UnblockLite/.",
+          ". Sources must be UNM match-order ids (e.g. bodian,migu,kugou), not 127.0.0.1; leave empty for product default bodian,migu,kugou. Ensure UnblockNeteaseMusic.exe is under BetterNCM data/UnblockLite/.",
       );
     }
     await becomeRunning();
@@ -471,7 +475,7 @@
     sourceLabel.textContent = "Sources ";
     const sources = document.createElement("input");
     sources.type = "text";
-    sources.placeholder = "empty = migu,bodian,kugou (not 127.0.0.1)";
+    sources.placeholder = "empty = bodian,migu,kugou (not 127.0.0.1)";
     // Migrate common misconfig: proxy host typed into Sources.
     const sanitizedInitial = sanitizeSources(settings.sources).join(",");
     if (settings.sources && sanitizedInitial !== settings.sources.trim()) {
@@ -484,7 +488,7 @@
 
     const note = document.createElement("p");
     note.textContent =
-      "Install UnblockLite.plugin into BetterNCM plugins. Place official UNM v0.28.0 as UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/. Sources are UNM -o match-order ids (default migu,bodian,kugou), not an IP. Host always enables ENABLE_FLAC and follows Sources order. Closing NCM to tray keeps UNM; tray Exit reclaims it.";
+      "Install UnblockLite.plugin into BetterNCM plugins. Place official UNM v0.28.0 as UnblockNeteaseMusic.exe under BetterNCM data/UnblockLite/. Sources are UNM -o match-order ids (default bodian,migu,kugou), not an IP. Host always enables ENABLE_FLAC and follows Sources order. Closing NCM to tray keeps UNM; tray Exit reclaims it.";
     root.appendChild(note);
 
     const actions = document.createElement("div");

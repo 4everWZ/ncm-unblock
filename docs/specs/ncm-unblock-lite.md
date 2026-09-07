@@ -41,7 +41,7 @@ V1 does not download UNM or pick versions.
 
 ### Ports and sources
 
-HTTP 3412 / HTTPS 3413 by default. Occupied configured ports fail; the host does not silently pick others. Empty or omitted sources still pass `-o migu bodian kugou` (product default that prefers ~320k-capable matchers and UNM's bodian path over broken anonymous kuwo VIP promo clips / qq-without-cookie M500); an explicit Sources list overrides that order. Sources are UNM match-order ids only (for example `migu,bodian,kugou`); host addresses such as `127.0.0.1` are rejected and ignored. The host always overlays `ENABLE_FLAC=true` and `FOLLOW_SOURCE_ORDER=true` when starting UNM (no plugin toggles), so UNM honors `-o` order instead of racing sources. The plugin launches the host through PowerShell `Start-Process` with a single pre-quoted `-ArgumentList` string, delivered via `-EncodedCommand` so nested quotes survive `betterncm.app.exec`. Config UI exposes Save & apply and Disable.
+HTTP 3412 / HTTPS 3413 by default. Occupied configured ports fail; the host does not silently pick others. Empty or omitted sources still pass `-o bodian migu kugou` (product default: bodian first under FOLLOW_SOURCE_ORDER so VIP matches do not wait on migu's ~10s miss timeouts; prefers ~320k-capable matchers and UNM's bodian path over broken anonymous kuwo VIP promo clips / qq-without-cookie M500); an explicit Sources list overrides that order. Sources are UNM match-order ids only (for example `bodian,migu,kugou`); host addresses such as `127.0.0.1` are rejected and ignored. The host always overlays `ENABLE_FLAC=true` and `FOLLOW_SOURCE_ORDER=true` when starting UNM (no plugin toggles), so UNM honors `-o` order instead of racing sources. The plugin launches the host through PowerShell `Start-Process` with a single pre-quoted `-ArgumentList` string, delivered via `-EncodedCommand` so nested quotes survive `betterncm.app.exec`. Config UI exposes Save & apply and Disable.
 
 ### HTTPS MITM trust
 
@@ -55,7 +55,7 @@ Official UNM v0.28.0 embeds a leaf that expires and is signed by an unpublished 
 | CEF `--type=` processes are not treated as session end | `ncm_watch` fixture with `--type=renderer` |
 | PAC readiness requires job-owned listeners and a complete `/proxy.pac` | Existing sidecar tests |
 | Host overlays `SIGN_CERT`/`SIGN_KEY` and trusts the packaged CA in Current User Root | `mitm_certs` tests plus managed-process env overlay test |
-| Host always passes `-o` (default `migu bodian kugou` when Sources empty) and overlays `ENABLE_FLAC=true` + `FOLLOW_SOURCE_ORDER=true` | Host source inspection plus live UNM argv/env spot-check |
+| Host always passes `-o` (default `bodian migu kugou` when Sources empty) and overlays `ENABLE_FLAC=true` + `FOLLOW_SOURCE_ORDER=true` | Host source inspection plus live UNM argv/env spot-check |
 | HTTPS through the proxy validates without ignoring TLS errors once the CA is trusted | Live curl without `-k` and NCM session without `net_error -202` |
 | Tray hide keeps host+UNM; tray Exit leaves zero host/UNM/port residue | Exact-client lifecycle run |
 | Host kill reclaims the UNM tree and does not kill NCM | Job-close and owner-kill tests |

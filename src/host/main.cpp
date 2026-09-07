@@ -21,8 +21,10 @@ constexpr wchar_t k_mutex_name[] = L"Local\\UnblockNeteaseMusic-Lite";
 constexpr wchar_t k_stop_name[] = L"Local\\UnblockNeteaseMusic-Lite-Stop";
 constexpr std::uint16_t k_default_http = 3412;
 constexpr std::uint16_t k_default_https = 3413;
-// Product match-order default: prefer migu then bodian; drop kuwo (VIP promo clip).
-constexpr std::wstring_view k_default_sources[] = {L"migu", L"bodian", L"kugou"};
+// Product match-order default: bodian first under FOLLOW_SOURCE_ORDER.
+// migu-first pays ~10s request timeouts on misses before falling through;
+// kuwo stays omitted (anonymous VIP promo clip).
+constexpr std::wstring_view k_default_sources[] = {L"bodian", L"migu", L"kugou"};
 
 void host_log(const std::string& message) {
   wchar_t temp_directory[MAX_PATH]{};
