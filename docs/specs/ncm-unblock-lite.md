@@ -24,7 +24,7 @@ UNM remains the matcher. The host does not reimplement providers. Injection rese
 2. Take the single-instance mutex. A second start exits success without launching another UNM.
 3. Attach to NCM main: `cloudmusic.exe` whose image path is `--ncm` and whose command line does not contain `--type=`. Prefer the oldest matching process. Do not treat window-close as exit.
 4. Resolve MITM material from `<plugin>/certs` (preferred), then `<UNM dir>/certs`, then the UNM directory. Install `ca.crt` into the **Current User** Root store when its thumbprint is not already present. Fail the session if material or trust setup is missing.
-5. Reserve the fixed loopback pair, start UNM suspended with `SIGN_CERT` / `SIGN_KEY` pointing at the packaged leaf and `ENABLE_FLAC=true` overlaid on the same environment, assign `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, resume, wait until both listeners belong to that job and `/proxy.pac` returns a complete HTTP 200.
+5. Reserve the fixed loopback pair, start UNM suspended with `SIGN_CERT` / `SIGN_KEY` pointing at the packaged leaf and `ENABLE_FLAC=true` / `FOLLOW_SOURCE_ORDER=true` overlaid on the same environment, assign `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, resume, wait until both listeners belong to that job and `/proxy.pac` returns a complete HTTP 200.
 6. Wait on the NCM main process handle (and the stop event). One-second tree checks detect unexpected UNM death.
 7. `TerminateJobObject`, wait until the tree is empty, release the mutex, exit.
 
@@ -41,7 +41,7 @@ V1 does not download UNM or pick versions.
 
 ### Ports and sources
 
-HTTP 3412 / HTTPS 3413 by default. Occupied configured ports fail; the host does not silently pick others. Empty or omitted sources still pass `-o migu kuwo kugou` (product default that prefers ~320k-capable matchers over qq-without-cookie M500); an explicit Sources list overrides that order. Sources are UNM match-order ids only (for example `migu,kuwo,kugou`); host addresses such as `127.0.0.1` are rejected and ignored. The host always overlays `ENABLE_FLAC=true` when starting UNM (no plugin toggle); UNM still takes the first successful source in `-o` order. The plugin launches the host through PowerShell `Start-Process` with a single pre-quoted `-ArgumentList` string, delivered via `-EncodedCommand` so nested quotes survive `betterncm.app.exec`. Config UI exposes Save & apply and Disable.
+HTTP 3412 / HTTPS 3413 by default. Occupied configured ports fail; the host does not silently pick others. Empty or omitted sources still pass `-o migu bodian kugou` (product default that prefers ~320k-capable matchers and UNM's bodian path over broken anonymous kuwo VIP promo clips / qq-without-cookie M500); an explicit Sources list overrides that order. Sources are UNM match-order ids only (for example `migu,bodian,kugou`); host addresses such as `127.0.0.1` are rejected and ignored. The host always overlays `ENABLE_FLAC=true` and `FOLLOW_SOURCE_ORDER=true` when starting UNM (no plugin toggles), so UNM honors `-o` order instead of racing sources. The plugin launches the host through PowerShell `Start-Process` with a single pre-quoted `-ArgumentList` string, delivered via `-EncodedCommand` so nested quotes survive `betterncm.app.exec`. Config UI exposes Save & apply and Disable.
 
 ### HTTPS MITM trust
 
@@ -55,7 +55,7 @@ Official UNM v0.28.0 embeds a leaf that expires and is signed by an unpublished 
 | CEF `--type=` processes are not treated as session end | `ncm_watch` fixture with `--type=renderer` |
 | PAC readiness requires job-owned listeners and a complete `/proxy.pac` | Existing sidecar tests |
 | Host overlays `SIGN_CERT`/`SIGN_KEY` and trusts the packaged CA in Current User Root | `mitm_certs` tests plus managed-process env overlay test |
-| Host always passes `-o` (default `migu kuwo kugou` when Sources empty) and overlays `ENABLE_FLAC=true` | Host source inspection plus live UNM argv/env spot-check |
+| Host always passes `-o` (default `migu bodian kugou` when Sources empty) and overlays `ENABLE_FLAC=true` + `FOLLOW_SOURCE_ORDER=true` | Host source inspection plus live UNM argv/env spot-check |
 | HTTPS through the proxy validates without ignoring TLS errors once the CA is trusted | Live curl without `-k` and NCM session without `net_error -202` |
 | Tray hide keeps host+UNM; tray Exit leaves zero host/UNM/port residue | Exact-client lifecycle run |
 | Host kill reclaims the UNM tree and does not kill NCM | Job-close and owner-kill tests |
