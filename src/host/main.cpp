@@ -132,18 +132,99 @@ void append_sources(std::vector<std::wstring>& sources, std::wstring_view value)
   flush();
 }
 
-[[nodiscard]] std::optional<options> parse_options(int argc, wchar_t** argv) {
+[[nodiscard]] std::filesystem::path host_module_directory();
+
+// One argv token per UTF-8 line. Empty lines and # comments are ignored.
+// Used so the plugin can start the host with zero command-line values and avoid
+// powershell.exe (BetterNCM ShellExecute re-joins args without re-quoting, so
+// paths with spaces cannot safely ride on lpParameters).
+[[nodiscard]] std::optional<std::vector<std::wstring>> load_args_file_tokens(
+    const std::filesystem::path& path) {
+  std::error_code code;
+  if (path.empty() || !path.is_absolute() ||
+      !std::filesystem::is_regular_file(path, code) || code) {
+    return std::nullopt;
+  }
+  std::ifstream stream(path, std::ios::binary);
+  if (!stream) {
+    return std::nullopt;
+  }
+  std::string bytes((std::istreambuf_iterator<char>(stream)),
+                    std::istreambuf_iterator<char>());
+  if (bytes.size() >= 3 && static_cast<unsigned char>(bytes[0]) == 0xef &&
+      static_cast<unsigned char>(bytes[1]) == 0xbb &&
+      static_cast<unsigned char>(bytes[2]) == 0xbf) {
+    bytes.erase(0, 3);
+  }
+  if (bytes.size() > 64 * 1024) {
+    host_log("args file too large");
+    return std::nullopt;
+  }
+  std::wstring wide;
+  if (!bytes.empty()) {
+    const auto needed = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(),
+        static_cast<int>(bytes.size()), nullptr, 0);
+    if (needed <= 0) {
+      host_log("args file is not valid UTF-8");
+      return std::nullopt;
+    }
+    wide.resize(static_cast<std::size_t>(needed));
+    if (MultiByteToWideChar(
+            CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(),
+            static_cast<int>(bytes.size()), wide.data(), needed) <= 0) {
+      host_log("args file UTF-8 decode failed");
+      return std::nullopt;
+    }
+  }
+  std::vector<std::wstring> tokens;
+  std::wstring line;
+  const auto flush_line = [&]() {
+    while (!line.empty() &&
+           (line.back() == L' ' || line.back() == L'\t' || line.back() == L'\r')) {
+      line.pop_back();
+    }
+    std::size_t start = 0;
+    while (start < line.size() &&
+           (line[start] == L' ' || line[start] == L'\t')) {
+      ++start;
+    }
+    if (start > 0) {
+      line.erase(0, start);
+    }
+    if (!line.empty() && line.front() != L'#') {
+      tokens.push_back(line);
+    }
+    line.clear();
+  };
+  for (const auto character : wide) {
+    if (character == L'\n') {
+      flush_line();
+    } else {
+      line.push_back(character);
+    }
+  }
+  flush_line();
+  return tokens;
+}
+
+[[nodiscard]] std::optional<options> parse_option_tokens(
+    const std::vector<std::wstring>& tokens) {
   options result;
-  for (int index = 1; index < argc; ++index) {
-    const std::wstring_view argument(argv[index]);
+  for (std::size_t index = 0; index < tokens.size(); ++index) {
+    const std::wstring_view argument(tokens[index]);
     if (argument == L"--stop") {
       result.stop = true;
       continue;
     }
-    if (index + 1 >= argc) {
+    if (argument == L"--args-file") {
+      // Expanded by the caller before parse_option_tokens.
       return std::nullopt;
     }
-    const std::wstring_view value(argv[++index]);
+    if (index + 1 >= tokens.size()) {
+      return std::nullopt;
+    }
+    const std::wstring_view value(tokens[++index]);
     if (argument == L"--ncm") {
       result.ncm = std::filesystem::path(value).lexically_normal();
     } else if (argument == L"--unm") {
@@ -180,6 +261,68 @@ void append_sources(std::vector<std::wstring>& sources, std::wstring_view value)
     return std::nullopt;
   }
   return result;
+}
+
+[[nodiscard]] std::optional<options> parse_options(int argc, wchar_t** argv) {
+  std::vector<std::wstring> tokens;
+  tokens.reserve(argc > 1 ? static_cast<std::size_t>(argc - 1) : 0);
+  for (int index = 1; index < argc; ++index) {
+    tokens.emplace_back(argv[index]);
+  }
+
+  // Exclusive --args-file <path> (optional leading/trailing --stop handled in file
+  // or as a sole argv token before expansion).
+  std::optional<std::filesystem::path> args_file;
+  std::vector<std::wstring> without_args_file;
+  without_args_file.reserve(tokens.size());
+  for (std::size_t index = 0; index < tokens.size(); ++index) {
+    if (tokens[index] == L"--args-file") {
+      if (index + 1 >= tokens.size() || args_file.has_value()) {
+        return std::nullopt;
+      }
+      args_file = std::filesystem::path(tokens[index + 1]).lexically_normal();
+      ++index;
+      continue;
+    }
+    without_args_file.push_back(tokens[index]);
+  }
+
+  if (args_file.has_value()) {
+    if (!without_args_file.empty()) {
+      // Only --stop may combine with --args-file on the process command line.
+      if (without_args_file.size() != 1 || without_args_file[0] != L"--stop") {
+        return std::nullopt;
+      }
+    }
+    const auto file_tokens = load_args_file_tokens(*args_file);
+    if (!file_tokens.has_value()) {
+      host_log("args file load failed path=" + narrow_path(*args_file));
+      return std::nullopt;
+    }
+    host_log("args file loaded path=" + narrow_path(*args_file) +
+             " tokens=" + std::to_string(file_tokens->size()));
+    auto parsed = parse_option_tokens(*file_tokens);
+    if (parsed.has_value() && !without_args_file.empty()) {
+      parsed->stop = true;
+    }
+    return parsed;
+  }
+
+  if (!without_args_file.empty()) {
+    return parse_option_tokens(without_args_file);
+  }
+
+  // Plugin direct start: no lpParameters (avoids flash + quote loss). Read
+  // launch.args beside unm-host.exe (plugin writes native/launch.args).
+  const auto default_file = host_module_directory() / L"launch.args";
+  const auto file_tokens = load_args_file_tokens(default_file);
+  if (!file_tokens.has_value()) {
+    host_log("default launch.args missing path=" + narrow_path(default_file));
+    return std::nullopt;
+  }
+  host_log("default launch.args loaded path=" + narrow_path(default_file) +
+           " tokens=" + std::to_string(file_tokens->size()));
+  return parse_option_tokens(*file_tokens);
 }
 
 int request_stop() {

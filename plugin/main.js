@@ -80,40 +80,11 @@
       .replace(/[\\/]+/g, "\\");
   }
 
-  function quoteCmd(value) {
-    // Escape for embedding inside a double-quoted Windows command-line fragment.
-    return `"${String(value).replace(/"/g, '\\"')}"`;
-  }
-
-  function quotePsSingle(value) {
-    return `'${String(value).replace(/'/g, "''")}'`;
-  }
-
-  // betterncm.app.exec strips nested quotes before powershell sees them, which
-  // splits "Program Files (x86)" paths. -EncodedCommand carries the script as
-  // base64 UTF-16LE so path quotes never traverse the outer command line.
-  function encodePsCommand(script) {
-    const text = String(script);
-    const bytes = new Uint8Array(text.length * 2);
-    for (let index = 0; index < text.length; index += 1) {
-      const code = text.charCodeAt(index);
-      bytes[index * 2] = code & 0xff;
-      bytes[index * 2 + 1] = (code >> 8) & 0xff;
-    }
-    let binary = "";
-    for (let index = 0; index < bytes.length; index += 1) {
-      binary += String.fromCharCode(bytes[index]);
-    }
-    return btoa(binary);
-  }
-
-  function runHiddenPs(script) {
-    const command =
-      "powershell -NoProfile -WindowStyle Hidden -EncodedCommand " +
-      encodePsCommand(script);
-    return exec(command);
-  }
-
+  // BetterNCM's util::exec uses ShellExecuteEx and re-joins argv without
+  // re-quoting, so paths with spaces cannot ride on lpParameters. Launch
+  // values are written one UTF-8 token per line beside unm-host.exe; the host
+  // reads native/launch.args when started with no command-line args. Avoids
+  // powershell.exe (console subsystem) flash on every NCM start.
   function isValidSourceName(token) {
     return /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(token);
   }
@@ -303,6 +274,62 @@
     return joinPath(data, relative);
   }
 
+  function parentDir(path) {
+    const text = normalizeDir(path);
+    const index = Math.max(text.lastIndexOf("\\"), text.lastIndexOf("/"));
+    if (index <= 0) {
+      return "";
+    }
+    return text.slice(0, index);
+  }
+
+  function launchArgsPath(hostPath) {
+    return joinPath(parentDir(hostPath), "launch.args");
+  }
+
+  function buildLaunchArgsContent(ncm, unm, httpPort, sources) {
+    // One argv token per line (UTF-8). Host ignores empty/# lines.
+    const lines = [
+      "--ncm",
+      String(ncm),
+      "--unm",
+      String(unm),
+      "--http",
+      String(httpPort),
+      "--https",
+      String(httpsPort(httpPort)),
+      "--sources",
+      sources.join(","),
+      "",
+    ];
+    return lines.join("\n");
+  }
+
+  async function writeFileText(path, content) {
+    if (!path) {
+      return false;
+    }
+    try {
+      if (betterncm && betterncm.fs && typeof betterncm.fs.writeFileText === "function") {
+        return Boolean(await betterncm.fs.writeFileText(path, content));
+      }
+    } catch (_) {
+      /* fall through */
+    }
+    try {
+      if (
+        typeof betterncm_native !== "undefined" &&
+        betterncm_native.fs &&
+        typeof betterncm_native.fs.writeFileText === "function"
+      ) {
+        return Boolean(betterncm_native.fs.writeFileText(path, content));
+      }
+    } catch (_) {
+      /* fall through */
+    }
+    return false;
+  }
+
   async function startHost() {
     const settings = configOf();
     const ncm = await ncmExecutable();
@@ -313,22 +340,33 @@
         "Missing unm-host.exe, UNM matcher, or NCM path. Bundled core/unm-app.js needs Node 18+ on PATH (or nvm); else place official UNM at BetterNCM data/UnblockLite/UnblockNeteaseMusic.exe",
       );
     }
-    // PS5 Start-Process joins ArgumentList arrays with spaces and does NOT
-    // quote tokens, so paths under "Program Files" must be one pre-quoted string.
-    const pieces = [
-      `--ncm ${quoteCmd(ncm)}`,
-      `--unm ${quoteCmd(unm)}`,
-      `--http ${settings.httpPort}`,
-      `--https ${httpsPort(settings.httpPort)}`,
-    ];
     const sources = resolveSources(settings.sources);
-    pieces.push(`--sources ${quoteCmd(sources.join(","))}`);
-    const argumentList = pieces.join(" ");
-    const script =
-      `Start-Process -FilePath ${quotePsSingle(host)} ` +
-      `-ArgumentList ${quotePsSingle(argumentList)} ` +
-      "-WindowStyle Hidden";
-    await runHiddenPs(script);
+    const argsPath = launchArgsPath(host);
+    const written = await writeFileText(
+      argsPath,
+      buildLaunchArgsContent(ncm, unm, settings.httpPort, sources),
+    );
+    if (!written) {
+      throw new Error(
+        "Could not write launch.args next to unm-host.exe (" + argsPath + ")",
+      );
+    }
+    // No lpParameters: host reads launch.args beside itself. SW_HIDE via
+    // showWindow=false; unm-host is already WIN32 (no console).
+    await exec(quotePathForExec(host));
+  }
+
+  function quotePathForExec(path) {
+    // ShellExecuteEx lpFile is the first CommandLineToArgvW token. Quote so
+    // paths with spaces stay one file path when BetterNCM parses the string.
+    const text = String(path || "");
+    if (!text) {
+      return "";
+    }
+    if (/[\s"]/.test(text)) {
+      return `"${text.replace(/"/g, "")}"`;
+    }
+    return text;
   }
 
   async function stopHost() {
@@ -336,11 +374,8 @@
     if (!host) {
       return;
     }
-    const script =
-      `Start-Process -FilePath ${quotePsSingle(host)} ` +
-      `-ArgumentList ${quotePsSingle("--stop")} ` +
-      "-WindowStyle Hidden -Wait";
-    await runHiddenPs(script);
+    // --stop has no spaces; safe as a single lpParameters token.
+    await exec(`${quotePathForExec(host)} --stop`);
   }
 
   function parseProxy(raw) {
