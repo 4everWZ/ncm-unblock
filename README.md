@@ -18,7 +18,7 @@ Requires Visual Studio 2022 Build Tools, CMake, and Ninja. The host is x64. Use 
 
 ## First use
 
-1. Install NCM 2.10.12 and BetterNCM v2.
+1. Install NCM 2.10.12 and BetterNCM v2. Prefer a local chromatic 1.3.4 x86 build of `msimg32.dll` over the GitHub prebuilt BetterNCM DLL when the desktop shortcut icon breaks after install (NCM 2.10.12 is 32-bit; replace only after closing all `cloudmusic.exe`).
 2. Install **Node.js 18+** on PATH (or nvm-windows). The default matcher is the bundled patched UNM JS under `core/unm-app.js`.
 3. Drop `UnblockLite.plugin` from a release (or `out/unblock-lite-*-x64/`) into BetterNCM's `plugins` directory. BetterNCM only loads `*.plugin` zip archives; a loose folder is ignored.
 4. Optional fallback: download official UNM [v0.28.0](https://github.com/UnblockNeteaseMusic/server/releases/tag/v0.28.0) Windows x64 standalone, rename it to `UnblockNeteaseMusic.exe`, and place it at `<BetterNCM data>/UnblockLite/UnblockNeteaseMusic.exe` if you are not using the bundled JS path.
